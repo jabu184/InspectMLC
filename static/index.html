@@ -36,10 +36,10 @@
 
     <!-- Header & Navigation -->
     <header class="header">
-        <div class="brand">
+        <div class="brand" id="brand-splash-trigger" style="cursor: pointer;" title="Click to view About & Version details">
             <div class="brand-icon">M</div>
             <div>
-                <div class="brand-title">Anti-Gravity QC</div>
+                <div class="brand-title">Anti-Gravity QC <span id="app-version-badge" class="badge" style="background: rgba(0, 242, 254, 0.15); color: #00f2fe; border: 1px solid rgba(0,242,254,0.4); font-size: 0.72rem; padding: 0.1rem 0.4rem; border-radius: 12px; margin-left: 0.4rem;">v1</span></div>
                 <div class="brand-subtitle">Multi-Platform MLC Gravitational QC & DLG Engine</div>
             </div>
         </div>
@@ -49,6 +49,7 @@
             <button type="button" id="nav-tab-simulator" class="btn btn-secondary">⚡ QC Simulator & Fault Generator</button>
             <button type="button" id="nav-tab-fluence" class="btn btn-secondary">🌌 Linac Fluence & Imager Simulator</button>
             <button type="button" id="nav-tab-settings" class="btn btn-secondary">⚙️ Settings & QATrack+</button>
+            <button type="button" id="btn-open-splash-about" class="btn btn-secondary" style="border-color: #00f2fe; color: #00f2fe;" title="About InspectMLC & Version Details">ℹ️ About</button>
         </div>
     </header>
 
@@ -663,10 +664,55 @@
 
     </div>
 
+    <!-- Splash / About Screen Modal -->
+    <div id="splash-about-modal" class="modal" style="display: none; position: fixed; z-index: 9999; left: 0; top: 0; width: 100%; height: 100%; background: rgba(5, 8, 17, 0.85); backdrop-filter: blur(8px);">
+        <div class="modal-content" style="background: #0f172a; border: 1px solid #1e293b; width: 90%; max-width: 650px; margin: 4% auto; border-radius: 12px; padding: 1.5rem; color: #f8fafc; box-shadow: 0 20px 50px rgba(0,0,0,0.6); position: relative;">
+            <span id="btn-close-splash-about" style="position: absolute; right: 1.2rem; top: 1rem; font-size: 1.5rem; cursor: pointer; color: #64748b; transition: color 0.2s;">&times;</span>
+            
+            <div style="display: flex; align-items: center; gap: 1rem; margin-bottom: 1.2rem; border-bottom: 1px solid #1e293b; padding-bottom: 1rem;">
+                <div style="width: 52px; height: 52px; background: linear-gradient(135deg, #00f2fe, #4facfe); border-radius: 12px; display: flex; align-items: center; justify-content: center; font-size: 1.8rem; font-weight: 800; color: #0f172a; box-shadow: 0 0 20px rgba(0,242,254,0.4);">
+                    M
+                </div>
+                <div>
+                    <div style="font-size: 1.4rem; font-weight: 800; color: #f8fafc; display: flex; align-items: center; gap: 0.6rem;">
+                        InspectMLC
+                        <span id="splash-modal-version" style="background: linear-gradient(135deg, rgba(0, 242, 254, 0.2), rgba(79, 172, 254, 0.2)); color: #00f2fe; border: 1px solid rgba(0,242,254,0.5); font-size: 0.8rem; padding: 0.15rem 0.6rem; border-radius: 12px; font-weight: 700;">v1</span>
+                    </div>
+                    <div style="font-size: 0.85rem; color: #94a3b8;">Multi-Platform Linac & MLC Gravitational Quality Assurance Suite</div>
+                </div>
+            </div>
+
+            <div style="font-size: 0.88rem; line-height: 1.6; color: #cbd5e1;">
+                <p style="margin-bottom: 1rem;">
+                    <strong>InspectMLC / Anti-Gravity QC Suite</strong> provides automated, sub-millimeter precision Quality Assurance for radiation oncology linear accelerators, specializing in gravitational MLC leaf position tracking, EPID calibration, and Dosimetric Leaf Gap (DLG) baseline calculation.
+                </p>
+
+                <div style="background: #1e293b; border-radius: 8px; padding: 1rem; margin-bottom: 1rem;">
+                    <div style="font-weight: 700; color: #38bdf8; margin-bottom: 0.5rem; font-size: 0.9rem;">✨ Technical Highlights & System Architecture</div>
+                    <ul style="margin: 0; padding-left: 1.2rem; font-size: 0.84rem; color: #94a3b8;">
+                        <li><strong style="color: #e2e8f0;">Multi-Platform Engine:</strong> Varian Halcyon SX2 Dual-Layer (114 leaves) & TrueBeam Millennium 120 (120 leaves).</li>
+                        <li><strong style="color: #e2e8f0;">Gravitational Sag Shift Analysis:</strong> 4-Cardinal angle (0°, 90°, 180°, 270°) per-leaf amplitude tracking & EPID panel flex correction.</li>
+                        <li><strong style="color: #e2e8f0;">Real-Time DICOM Directory Watcher:</strong> Live directory watcher with readiness gating and automated field classification.</li>
+                        <li><strong style="color: #e2e8f0;">QATrack+ REST Integration:</strong> Instant payload transmission of QA metrics via REST API.</li>
+                    </ul>
+                </div>
+
+                <div style="display: flex; justify-content: space-between; align-items: center; background: #0b1120; padding: 0.75rem 1rem; border-radius: 8px; font-size: 0.82rem; color: #64748b; border: 1px solid #1e293b;">
+                    <div>Engine: <strong>FastAPI + Pydicom + SciPy</strong></div>
+                    <div>Build Version: <strong id="splash-build-string" style="color: #00f2fe;">v1</strong></div>
+                </div>
+            </div>
+
+            <div style="margin-top: 1.2rem; display: flex; justify-content: flex-end;">
+                <button type="button" id="btn-close-splash-modal-bottom" class="btn" style="background: linear-gradient(135deg, #00f2fe, #0284c7); color: #0f172a; font-weight: 700; border: none; padding: 0.4rem 1.2rem; cursor: pointer;">Close</button>
+            </div>
+        </div>
+    </div>
+
     <!-- Scripts with Cache Busting -->
-    <script src="/static/js/viewer.js?v=5.0"></script>
-    <script src="/static/js/mlc_charts.js?v=5.0"></script>
-    <script src="/static/js/simulator_ui.js?v=5.0"></script>
-    <script src="/static/js/app.js?v=5.0"></script>
+    <script src="/static/js/viewer.js?v=6.0"></script>
+    <script src="/static/js/mlc_charts.js?v=6.0"></script>
+    <script src="/static/js/simulator_ui.js?v=6.0"></script>
+    <script src="/static/js/app.js?v=6.0"></script>
 </body>
 </html>

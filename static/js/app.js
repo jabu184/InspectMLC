@@ -502,11 +502,16 @@ document.addEventListener('DOMContentLoaded', () => {
             if (qatrackLogOutput) {
                 qatrackLogOutput.textContent = JSON.stringify(data, null, 2);
             }
-            alert(`QATrack+ Push Executed: ${data.message || 'Completed'}`);
+            if (data.status === 'success') {
+                alert(`✅ QATrack+ Push Successful: ${data.message}`);
+            } else {
+                alert(`⚠️ QATrack+ Push Error: ${data.message}\nCheck Settings & QATrack+ log output for details.`);
+            }
         })
         .catch(err => {
             console.error("QATrack+ push error:", err);
             if (qatrackLogOutput) qatrackLogOutput.textContent = "Push failed: " + err;
+            alert("QATrack+ push request failed. Check server logs.");
         });
     }
 
@@ -516,6 +521,50 @@ document.addEventListener('DOMContentLoaded', () => {
     if (btnPushQATrackNow) btnPushQATrackNow.addEventListener('click', pushQATrackResults);
 
     loadQATrackSettings();
+
+    // Fetch and bind App Version info
+    function loadAppVersion() {
+        fetch('/api/version')
+            .then(res => res.json())
+            .then(data => {
+                if (data.status === 'success' && data.version) {
+                    const badge = document.getElementById('app-version-badge');
+                    const modalVer = document.getElementById('splash-modal-version');
+                    const buildStr = document.getElementById('splash-build-string');
+                    if (badge) badge.textContent = data.version;
+                    if (modalVer) modalVer.textContent = data.version;
+                    if (buildStr) buildStr.textContent = data.version;
+                }
+            })
+            .catch(err => console.warn("Failed to load version:", err));
+    }
+    loadAppVersion();
+
+    // Splash / About Modal Controls
+    const splashModal = document.getElementById('splash-about-modal');
+    const btnOpenSplash = document.getElementById('btn-open-splash-about');
+    const brandSplashTrigger = document.getElementById('brand-splash-trigger');
+    const btnCloseSplash = document.getElementById('btn-close-splash-about');
+    const btnCloseSplashBottom = document.getElementById('btn-close-splash-modal-bottom');
+
+    function openSplashModal() {
+        if (splashModal) splashModal.style.display = 'block';
+    }
+
+    function closeSplashModal() {
+        if (splashModal) splashModal.style.display = 'none';
+    }
+
+    if (btnOpenSplash) btnOpenSplash.addEventListener('click', openSplashModal);
+    if (brandSplashTrigger) brandSplashTrigger.addEventListener('click', openSplashModal);
+    if (btnCloseSplash) btnCloseSplash.addEventListener('click', closeSplashModal);
+    if (btnCloseSplashBottom) btnCloseSplashBottom.addEventListener('click', closeSplashModal);
+
+    if (splashModal) {
+        splashModal.addEventListener('click', (e) => {
+            if (e.target === splashModal) closeSplashModal();
+        });
+    }
 
     function filterByActiveBank(list) {
         if (!list) return [];

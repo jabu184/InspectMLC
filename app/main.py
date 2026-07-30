@@ -9,6 +9,11 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.middleware.cors import CORSMiddleware
 from starlette.middleware.base import BaseHTTPMiddleware
 from pydantic import BaseModel
+import random
+import json
+import urllib.request
+import urllib.error
+from datetime import datetime
 import numpy as np
 import pydicom
 from PIL import Image
@@ -76,11 +81,57 @@ def normalize_path(p: str) -> str:
         return ""
     return os.path.abspath(p).replace("\\", "/")
 
+def get_app_version() -> str:
+    root_dir = get_base_dir()
+    v_file = os.path.join(root_dir, "version.txt")
+    base_version = "v1"
+    if os.path.exists(v_file):
+        try:
+            with open(v_file, "r", encoding="utf-8") as f:
+                val = f.read().strip()
+                if val:
+                    base_version = val
+        except Exception:
+            pass
+
+    build_file = os.path.join(root_dir, "build_version.txt")
+    build_num = ""
+    if os.path.exists(build_file):
+        try:
+            with open(build_file, "r", encoding="utf-8") as f:
+                build_num = f.read().strip()
+        except Exception:
+            pass
+
+    if not build_num:
+        build_num = str(random.randint(1000, 9999))
+        try:
+            with open(build_file, "w", encoding="utf-8") as f:
+                f.write(build_num)
+        except Exception:
+            pass
+
+    clean_base = base_version if base_version.startswith("v") else f"v{base_version}"
+    return f"{clean_base}.{build_num}"
+
+@app.get("/api/version")
+def get_version_endpoint():
+    ver = get_app_version()
+    return {
+        "status": "success",
+        "version": ver,
+        "base_version": "v1",
+        "app_name": "InspectMLC - Multi-Platform Linac & MLC Quality Assurance Suite",
+        "build_date": "2026-07-31",
+        "supported_linacs": ["Varian Halcyon Dual-Layer SX2 (114 Leaves)", "Varian TrueBeam Millennium 120 (120 Leaves)"]
+    }
+
 @app.get("/api/health")
 def health_check():
     return {
         "status": "ok",
-        "app": "Anti-Gravity QC v3.1 - TrueBeam GravityTB & Halcyon Multi-Platform Engine",
+        "version": get_app_version(),
+        "app": "Anti-Gravity QC - TrueBeam GravityTB & Halcyon Multi-Platform Engine",
         "supported_linacs": ["Varian Halcyon Dual-Layer SX2 (114 Leaves)", "Varian TrueBeam Millennium 120 (120 Leaves)"]
     }
 
@@ -405,27 +456,46 @@ def update_settings_endpoint(settings: QATrackSettingsModel):
 
 @app.post("/api/test-qatrack-connection")
 def test_qatrack_connection_endpoint(settings: QATrackSettingsModel):
-    url = settings.qatrack_url.rstrip("/") + "/api/v1/qa/test-lists/"
+    base_url = settings.qatrack_url.rstrip("/")
+    candidate_urls = [
+        f"{base_url}/api/v1/qa/test-lists/",
+        f"{base_url}/api/qa/test-lists/",
+        f"{base_url}/api/unittestcollections/",
+        base_url
+    ]
     headers = {
-        "Content-Type": "application/json"
+        "Content-Type": "application/json",
+        "Accept": "application/json"
     }
     if settings.qatrack_token:
         headers["Authorization"] = f"Token {settings.qatrack_token}"
 
-    try:
-        req = urllib.request.Request(url, headers=headers)
-        with urllib.request.urlopen(req, timeout=5) as resp:
-            data = json.loads(resp.read().decode("utf-8"))
-            return {
-                "status": "success",
-                "message": f"Successfully connected to QATrack+ server ({settings.qatrack_url})",
-                "http_status": resp.status
-            }
-    except Exception as err:
-        return {
-            "status": "warning",
-            "message": f"QATrack+ connection check returned: {err}. (Server address configured)"
-        }
+    last_err = None
+    for url in candidate_urls:
+        try:
+            req = urllib.request.Request(url, headers=headers)
+            with urllib.request.urlopen(req, timeout=6) as resp:
+                return {
+                    "status": "success",
+                    "message": f"Successfully connected to QATrack+ server ({settings.qatrack_url})",
+                    "endpoint_used": url,
+                    "http_status": resp.status
+                }
+        except urllib.error.HTTPError as http_err:
+            last_err = f"HTTP {http_err.code}: {http_err.reason}"
+            if http_err.code in [401, 403]:
+                return {
+                    "status": "error",
+                    "message": f"QATrack+ Authentication Failed ({last_err}). Please verify your API Token.",
+                    "http_status": http_err.code
+                }
+        except Exception as err:
+            last_err = str(err)
+
+    return {
+        "status": "error",
+        "message": f"Could not reach QATrack+ server ({settings.qatrack_url}). Error: {last_err}"
+    }
 
 class PushQATrackRequest(BaseModel):
     summary: Dict[str, Any]
@@ -433,57 +503,86 @@ class PushQATrackRequest(BaseModel):
 @app.post("/api/push-qatrack-results")
 def push_qatrack_results_endpoint(req: PushQATrackRequest):
     settings = load_qatrack_settings()
-    url = settings["qatrack_url"].rstrip("/") + "/api/v1/qa/test-list-instances/"
+    base_url = settings.get("qatrack_url", "http://localhost:8000").rstrip("/")
     
     summary = req.summary
-    max_sag = summary.get("max_sag_amplitude_mm", 0.0)
-    max_leaf_sag = summary.get("max_individual_leaf_sag_mm", max_sag)
-    pass_rate = summary.get("pass_rate_pct", 100.0)
-    dlg = summary.get("baseline_g0_dlg", {}).get("dlg_system_mm", 0.0)
-    max_fluence = summary.get("max_dosimetric_delta_pct", 0.0)
+    max_sag = float(summary.get("max_sag_amplitude_mm", 0.0))
+    max_leaf_sag = float(summary.get("max_individual_leaf_sag_mm", max_sag))
+    pass_rate = float(summary.get("pass_rate_pct", 100.0))
+    dlg_info = summary.get("baseline_g0_dlg", {})
+    dlg = float(dlg_info.get("dlg_system_mm", 0.0)) if isinstance(dlg_info, dict) else 0.0
+    max_fluence = float(summary.get("max_dosimetric_delta_pct", 0.0))
     status_str = "PASS" if pass_rate >= 95 else ("WARN" if pass_rate >= 85 else "FAIL")
 
     results_payload = {
-        settings["macro_max_sag"]: {"val": max_sag},
-        settings["macro_max_leaf_sag"]: {"val": max_leaf_sag},
-        settings["macro_pass_rate"]: {"val": pass_rate},
-        settings["macro_dlg_baseline"]: {"val": dlg},
-        settings["macro_max_fluence"]: {"val": max_fluence},
-        settings["macro_qc_status"]: {"val": status_str}
+        settings.get("macro_max_sag", "sag_max_mm"): {"val": round(max_sag, 4)},
+        settings.get("macro_max_leaf_sag", "sag_max_leaf_mm"): {"val": round(max_leaf_sag, 4)},
+        settings.get("macro_pass_rate", "pass_rate_pct"): {"val": round(pass_rate, 2)},
+        settings.get("macro_dlg_baseline", "dlg_0deg_mm"): {"val": round(dlg, 4)},
+        settings.get("macro_max_fluence", "max_fluence_delta_pct"): {"val": round(max_fluence, 2)},
+        settings.get("macro_qc_status", "qc_status"): {"val": status_str}
     }
 
     payload = {
-        "unit": settings["unit_name"],
-        "test_list": settings["test_list_slug"],
+        "unit": settings.get("unit_name", "Halcyon_1"),
+        "test_list": settings.get("test_list_slug", "anti_gravity_mlc_qc"),
+        "work_completed": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
         "status": status_str,
         "results": results_payload,
         "comment": f"Auto-pushed from Anti-Gravity QC Engine (Linac: {summary.get('machine_type', 'HALCYON')})"
     }
 
+    candidate_urls = [
+        f"{base_url}/api/v1/qa/test-list-instances/",
+        f"{base_url}/api/qa/test-list-instances/",
+        f"{base_url}/api/unittestcollections/"
+    ]
+
     headers = {
-        "Content-Type": "application/json"
+        "Content-Type": "application/json",
+        "Accept": "application/json"
     }
     if settings.get("qatrack_token"):
         headers["Authorization"] = f"Token {settings['qatrack_token']}"
 
-    try:
-        json_bytes = json.dumps(payload).encode("utf-8")
-        h_req = urllib.request.Request(url, data=json_bytes, headers=headers, method="POST")
-        with urllib.request.urlopen(h_req, timeout=8) as resp:
-            resp_data = json.loads(resp.read().decode("utf-8"))
-            return {
-                "status": "success",
-                "message": f"Successfully pushed results to QATrack+ ({settings['qatrack_url']})",
-                "payload_sent": payload,
-                "qatrack_response": resp_data
-            }
-    except Exception as push_err:
-        return {
-            "status": "success",
-            "message": f"Generated QATrack+ Payload for {settings['unit_name']} / {settings['test_list_slug']}",
-            "payload_sent": payload,
-            "note": f"Live push attempt reported: {push_err}"
-        }
+    json_bytes = json.dumps(payload).encode("utf-8")
+    last_err_msg = ""
+
+    for url in candidate_urls:
+        try:
+            h_req = urllib.request.Request(url, data=json_bytes, headers=headers, method="POST")
+            with urllib.request.urlopen(h_req, timeout=10) as resp:
+                resp_str = resp.read().decode("utf-8")
+                try:
+                    resp_data = json.loads(resp_str)
+                except Exception:
+                    resp_data = {"raw_response": resp_str}
+
+                return {
+                    "status": "success",
+                    "message": f"Successfully pushed results to QATrack+ ({settings.get('unit_name')} / {settings.get('test_list_slug')})",
+                    "payload_sent": payload,
+                    "qatrack_response": resp_data
+                }
+        except urllib.error.HTTPError as http_err:
+            err_body = http_err.read().decode("utf-8", errors="ignore")
+            last_err_msg = f"HTTP {http_err.code} ({http_err.reason}): {err_body[:300]}"
+            if http_err.code in [400, 401, 403, 404]:
+                return {
+                    "status": "error",
+                    "message": f"QATrack+ Push Failed ({last_err_msg})",
+                    "payload_sent": payload,
+                    "http_status": http_err.code,
+                    "details": err_body
+                }
+        except Exception as push_err:
+            last_err_msg = str(push_err)
+
+    return {
+        "status": "error",
+        "message": f"QATrack+ Push Failed: Could not connect to {base_url}. Error: {last_err_msg}",
+        "payload_sent": payload
+    }
 
 @app.get("/api/plan-info")
 def get_plan_info_endpoint(plan_path: str):
