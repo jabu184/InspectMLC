@@ -1,0 +1,24 @@
+# Python byte-code / binaries
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+env/
+venv/
+ENV/
+
+# PyInstaller build files
+build/
+*.manifest
+*.spec.bak
+
+# Exclude compiled binaries folder from git tracked files (due to GitHub 100MB per file limit)
+# The portable ZIP and executable are built locally via InspectMLC.spec
+dist/
+
+# Operating system / IDE
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/

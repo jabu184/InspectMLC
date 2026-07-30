@@ -1,0 +1,672 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Anti-Gravity QC - Multi-Platform MLC Gravitational QC & DLG Engine</title>
+    <link rel="stylesheet" href="/static/css/style.css?v=2.9">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <style>
+        .input-header-row {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 0.2rem;
+        }
+        .btn-tiny-upload {
+            font-size: 0.72rem;
+            color: #00f2fe;
+            background: rgba(0, 242, 254, 0.1);
+            border: 1px solid rgba(0, 242, 254, 0.3);
+            padding: 0.15rem 0.4rem;
+            border-radius: 4px;
+            cursor: pointer;
+            transition: all 0.2s ease;
+        }
+        .btn-tiny-upload:hover {
+            background: rgba(0, 242, 254, 0.25);
+            border-color: #00f2fe;
+            color: #fff;
+        }
+    </style>
+</head>
+<body>
+
+    <!-- Header & Navigation -->
+    <header class="header">
+        <div class="brand">
+            <div class="brand-icon">M</div>
+            <div>
+                <div class="brand-title">Anti-Gravity QC</div>
+                <div class="brand-subtitle">Multi-Platform MLC Gravitational QC & DLG Engine</div>
+            </div>
+        </div>
+
+        <div style="display: flex; gap: 0.5rem; align-items: center; flex-wrap: wrap;">
+            <button type="button" id="nav-tab-analysis" class="btn active">📊 Gravitational Sag & DLG Analysis</button>
+            <button type="button" id="nav-tab-simulator" class="btn btn-secondary">⚡ QC Simulator & Fault Generator</button>
+            <button type="button" id="nav-tab-fluence" class="btn btn-secondary">🌌 Linac Fluence & Imager Simulator</button>
+            <button type="button" id="nav-tab-settings" class="btn btn-secondary">⚙️ Settings & QATrack+</button>
+        </div>
+    </header>
+
+    <div class="container">
+        
+        <!-- SECTION 1: GRAVITATIONAL SAG ANALYSIS PIPELINE -->
+        <div id="section-analysis">
+            
+            <div class="card" style="margin-bottom: 1rem;">
+                <div class="card-header">
+                    <div class="card-title">
+                        <span>⚙️</span> Multi-Platform Machine Setup & Cardinal Angle Series Controls (0°, 90°, 180°, 270°)
+                    </div>
+                    <div style="display: flex; gap: 0.75rem; align-items: center; flex-wrap: wrap;">
+                        <button type="button" id="btn-generate-demo" class="btn btn-secondary">
+                            <span>✨</span> Generate Demo Series
+                        </button>
+                        <button type="button" id="btn-push-qatrack" class="btn btn-secondary" style="border-color: #38bdf8; color: #38bdf8;" title="Push current analysis results to QATrack+ API">
+                            <span>🚀</span> Push to QATrack+
+                        </button>
+                        <button type="button" id="btn-run-sag-analysis" class="btn" style="background: #334155; cursor: not-allowed;" disabled title="Awaiting all required DICOM files before analysis can run">
+                            <span>▶</span> Run Analysis
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Real-Time Directory Watcher & Live Expected Field Checklist Card -->
+                <div style="background: rgba(15, 23, 42, 0.95); border: 1px solid #00f2fe; padding: 1rem; border-radius: 8px; margin-bottom: 1rem; box-shadow: 0 4px 14px rgba(0,242,254,0.18);">
+                    
+                    <!-- Top Bar: Pre-selected Machine Selector & Directory Path + Browse -->
+                    <div style="display: grid; grid-template-columns: 320px 1fr auto; gap: 0.75rem; align-items: end; margin-bottom: 0.85rem;">
+                        
+                        <!-- Pre-selected Machine Architecture Selector -->
+                        <div class="input-group">
+                            <label for="select-machine-type" style="color: #00f2fe; font-weight: 700; font-size: 0.82rem;">1. Pre-Select Linac Architecture</label>
+                            <select id="select-machine-type" style="font-weight: 700; background: #0f172a; border-color: #00f2fe; color: #00f2fe;">
+                                <option value="HALCYON">Varian Halcyon (Dual-Layer SX2: 12 Expected Fields)</option>
+                                <option value="TRUEBEAM">Varian TrueBeam (Millennium 120: 8 Expected Fields)</option>
+                            </select>
+                        </div>
+
+                        <!-- Directory Path & Standard Windows Native Browse Button -->
+                        <div class="input-group">
+                            <label for="input-watch-folder" style="color: #38bdf8; font-weight: 700; font-size: 0.82rem;">2. Watched Directory Path</label>
+                            <div style="display: flex; gap: 0.4rem;">
+                                <input type="text" id="input-watch-folder" value="Test Images/Gravity ETHOS/Normal" style="flex: 1; font-size: 0.82rem; background: #0f172a; color: #f8fafc; border: 1px solid #334155; border-radius: 4px; padding: 0.4rem 0.6rem;" placeholder="e.g. C:\Users\vboxuser\InspectMLC\Test Images\Gravity ETHOS\Normal">
+                                <button type="button" id="btn-browse-folder-trigger" class="btn btn-secondary" style="padding: 0.4rem 0.8rem; font-size: 0.8rem; white-space: nowrap; border-color: #00f2fe; color: #00f2fe; font-weight: 700;" title="Open Standard Windows Directory Selection Dialog">
+                                    📁 Browse Windows...
+                                </button>
+                            </div>
+                        </div>
+
+                        <!-- Action Controls -->
+                        <div style="display: flex; gap: 0.4rem; align-items: center;">
+                            <label style="display: flex; align-items: center; gap: 0.3rem; font-size: 0.75rem; color: #94a3b8; cursor: pointer; background: #1e293b; padding: 0.45rem 0.6rem; border-radius: 4px; border: 1px solid #334155;">
+                                <input type="checkbox" id="chk-live-watch" checked style="accent-color: #00f2fe;">
+                                Live (3s)
+                            </label>
+                        </div>
+                    </div>
+
+                    <!-- Live Checklist of Expected DICOM Fields -->
+                    <div style="background: #0f172a; padding: 0.75rem; border-radius: 6px; border: 1px solid #1e293b;">
+                        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.5rem; flex-wrap: wrap; gap: 0.5rem;">
+                            <span style="font-size: 0.82rem; font-weight: 700; color: #00f2fe;" id="lbl-checklist-title">
+                                📋 Live Expected DICOM Field Checklist (0 / 12 Detected)
+                            </span>
+                            <span id="lbl-watched-count" class="badge-pill WARN" style="background: rgba(245,158,11,0.2); color: #f59e0b; font-weight: 700;">
+                                🟡 Scanning Directory...
+                            </span>
+                        </div>
+
+                        <!-- Expected Fields Checklist Grid -->
+                        <div id="expected-fields-checklist-grid" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 0.4rem;">
+                            <!-- Mapped fields: ✅ Green, Pending: ⏳ Gray -->
+                        </div>
+
+                        <!-- Unmapped / Ambiguous DICOM Warnings Container -->
+                        <div id="unmapped-files-warning-container" style="display: none; margin-top: 0.6rem; padding: 0.5rem; background: rgba(239, 68, 68, 0.12); border: 1px solid #ef4444; border-radius: 4px; font-size: 0.78rem; color: #f8fafc;">
+                            <div style="font-weight: 700; color: #ef4444; margin-bottom: 0.25rem;">⚠️ Unmapped / Ambiguous Files Detected in Watched Directory:</div>
+                            <div id="unmapped-files-list" style="display: flex; flex-wrap: wrap; gap: 0.35rem;"></div>
+                        </div>
+                    </div>
+
+                    <div style="font-size: 0.78rem; color: #94a3b8; margin-top: 0.5rem;" id="machine-desc-box">
+                        Halcyon Triad Workflow: 1 Distal Slit (SX2) + 1 Proximal Slit (SX1) + 1 Open Field per cardinal angle.
+                    </div>
+                </div>
+
+                <!-- Options Bar -->
+                <div style="display: flex; gap: 1.5rem; align-items: center; margin-top: 0.75rem; padding-top: 0.5rem; border-top: 1px solid var(--border-color); flex-wrap: wrap;">
+                    <div class="input-group" style="width: 130px;">
+                        <label for="input-warn-sag" style="color: #f59e0b; font-weight: 700;">Warning Tol (mm)</label>
+                        <input type="number" id="input-warn-sag" value="0.5" step="0.1" min="0.1" style="border-color: #f59e0b;">
+                    </div>
+
+                    <div class="input-group" style="width: 130px;">
+                        <label for="input-action-sag" style="color: #ef4444; font-weight: 700;">Action Tol (mm)</label>
+                        <input type="number" id="input-action-sag" value="1.0" step="0.1" min="0.2" style="border-color: #ef4444;">
+                    </div>
+
+                    <label style="display: flex; align-items: center; gap: 0.4rem; font-size: 0.82rem; color: #00f2fe; cursor: pointer;">
+                        <input type="checkbox" id="chk-open-ratio" checked style="accent-color: #00f2fe;">
+                        Apply Open-Field Panel Flex Subtraction
+                    </label>
+
+                    <label style="display: flex; align-items: center; gap: 0.4rem; font-size: 0.82rem; color: #a855f7; cursor: pointer;">
+                        <input type="checkbox" id="chk-mag-corr" checked style="accent-color: #a855f7;">
+                        Apply EPID Magnification Correction k_mag(θ)
+                    </label>
+
+                    <label style="display: flex; align-items: center; gap: 0.4rem; font-size: 0.82rem; color: var(--text-muted); cursor: pointer;">
+                        <input type="checkbox" id="chk-auto-flex" checked style="accent-color: #00f2fe;">
+                        Auto EPID Panel Flex Correction
+                    </label>
+                </div>
+            </div>
+
+            <!-- Directory Browser Modal Dialog -->
+            <div id="folder-browser-modal" style="display: none; position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; background: rgba(15, 23, 42, 0.85); backdrop-filter: blur(4px); z-index: 9999; align-items: center; justify-content: center;">
+                <div style="background: #0f172a; border: 1px solid #00f2fe; width: 90%; max-width: 650px; border-radius: 8px; box-shadow: 0 10px 25px rgba(0,0,0,0.5); display: flex; flex-direction: column; max-height: 85vh;">
+                    <div style="padding: 0.75rem 1rem; background: rgba(0, 242, 254, 0.1); border-bottom: 1px solid #1e293b; display: flex; justify-content: space-between; align-items: center;">
+                        <span style="font-weight: 700; color: #00f2fe; font-size: 0.95rem;">📁 Browse Server Directories</span>
+                        <button type="button" id="btn-close-folder-modal" class="btn btn-secondary" style="padding: 0.2rem 0.6rem; font-size: 0.78rem;">✕ Close</button>
+                    </div>
+                    
+                    <div style="padding: 0.75rem 1rem; border-bottom: 1px solid #1e293b; display: flex; gap: 0.5rem; align-items: center; background: #1e293b;">
+                        <button type="button" id="btn-browser-parent" class="btn btn-secondary" style="padding: 0.25rem 0.6rem; font-size: 0.78rem;">⬆️ Up Folder</button>
+                        <span id="lbl-browser-current-path" style="font-size: 0.8rem; color: #38bdf8; font-weight: 600; text-overflow: ellipsis; overflow: hidden; white-space: nowrap; flex: 1;">
+                            Test Images
+                        </span>
+                    </div>
+
+                    <div id="browser-folder-list" style="padding: 0.75rem 1rem; overflow-y: auto; flex: 1; display: flex; flex-direction: column; gap: 0.4rem;">
+                        <!-- Subdirectories list populated dynamically -->
+                    </div>
+
+                    <div style="padding: 0.75rem 1rem; background: #0f172a; border-top: 1px solid #1e293b; display: flex; justify-content: flex-end; gap: 0.5rem;">
+                        <button type="button" id="btn-browser-select" class="btn" style="padding: 0.4rem 1rem; font-size: 0.82rem; font-weight: 700; background: linear-gradient(135deg, #00f2fe, #0284c7); color: #0f172a;">
+                            ✅ Select This Directory
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- KPI Metrics Grid -->
+            <div class="kpi-grid" style="margin-bottom: 1rem;">
+                <div class="kpi-card">
+                    <div class="kpi-title">Pass Rate (% Tracks)</div>
+                    <div id="kpi-pass-rate" class="kpi-value badge-pass">--%</div>
+                    <div class="kpi-sub">Tol: &lt;0.5mm sag | &lt;5% fluence</div>
+                </div>
+
+                <div class="kpi-card">
+                    <div class="kpi-title">0° Baseline System DLG</div>
+                    <div id="kpi-dlg-val" class="kpi-value" style="color: #a855f7;">-- mm</div>
+                    <div class="kpi-sub" id="kpi-dlg-sub">Proximal vs Distal Gap</div>
+                </div>
+
+                <div class="kpi-card">
+                    <div class="kpi-title">Max Slit Center Sag</div>
+                    <div id="kpi-max-sag" class="kpi-value">-- mm</div>
+                    <div class="kpi-sub">Slit Midpoint Shift</div>
+                </div>
+
+                <div class="kpi-card">
+                    <div class="kpi-title">Max Individual Leaf Sag</div>
+                    <div id="kpi-max-leaf-sag" class="kpi-value" style="color: #f59e0b;">-- mm</div>
+                    <div class="kpi-sub" id="kpi-max-leaf-sub">Worst Individual Leaf</div>
+                </div>
+
+                <div class="kpi-card">
+                    <div class="kpi-title">Max Dosimetric Delta</div>
+                    <div id="kpi-max-fluence" class="kpi-value" style="color: #38bdf8;">-- %</div>
+                    <div class="kpi-sub">Max ΔD_i Area Integration</div>
+                </div>
+
+                <div class="kpi-card">
+                    <div class="kpi-title">Linac Configuration</div>
+                    <div id="kpi-flex-status" class="kpi-value" style="font-size: 0.95rem;">Halcyon (114 Leaves)</div>
+                    <div class="kpi-sub" id="kpi-linac-sub">57 Staggered Tracks</div>
+                </div>
+            </div>
+
+            <!-- Main Analysis Grid -->
+            <div class="main-grid">
+                
+                <!-- Left Panel: Canvas Viewer -->
+                <div class="card">
+                    <div class="card-header">
+                        <div class="card-title">
+                            <span>📷</span> EPID Viewer & Image Mode Selector
+                        </div>
+                        <div style="display: flex; gap: 0.5rem; align-items: center; flex-wrap: wrap;">
+                            <!-- Image Type Toggle (MLC Slit vs Open Field) -->
+                            <div class="view-tabs" style="margin-right: 0.5rem;">
+                                <button type="button" id="tab-img-mlc" class="tab-btn active" title="Show Dynamic MLC Slit Image">📐 MLC Slit</button>
+                                <button type="button" id="tab-img-open" class="tab-btn" title="Show Open Field Image">⬜ Open Field</button>
+                                <button type="button" id="btn-toggle-all-tracks" class="tab-btn" title="Toggle visibility of all MLC leaf edge markers">👁️ All Tracks</button>
+                            </div>
+
+                            <!-- Cardinal Gantry Angle View Tabs -->
+                            <div class="view-tabs">
+                                <button type="button" id="tab-gantry-0" class="tab-btn active">0° Baseline</button>
+                                <button type="button" id="tab-gantry-90" class="tab-btn">90° Gravity</button>
+                                <button type="button" id="tab-gantry-180" class="tab-btn">180°</button>
+                                <button type="button" id="tab-gantry-270" class="tab-btn">270° Counter</button>
+                            </div>
+                            <button type="button" id="btn-reset-view" class="btn btn-secondary" style="padding: 0.25rem 0.6rem; font-size: 0.78rem;">
+                                Reset Zoom
+                            </button>
+                        </div>
+                    </div>
+
+                    <div class="canvas-container">
+                        <canvas id="canvas-viewer"></canvas>
+                        <div id="viewer-overlay-info" class="viewer-overlay">
+                            X: 0 px | Y: 0 px | Zoom: 100%
+                        </div>
+                    </div>
+
+                    <!-- Heatmap Color Scale Legend (Percentage of Warning & Action Tolerances) -->
+                    <div style="display: flex; gap: 0.75rem; align-items: center; justify-content: center; font-size: 0.75rem; color: #94a3b8; background: #0f172a; padding: 0.4rem 0.6rem; border-top: 1px solid var(--border-color); flex-wrap: wrap;" id="heatmap-legend-strip">
+                        <span style="font-weight: 700; color: #38bdf8;">🎨 Leaf Error Color Heatmap:</span>
+                        <span style="color: #10b981; font-weight: 700;" id="leg-pass">🟢 &lt;50% Warn (&lt;0.25mm)</span>
+                        <span style="color: #eab308; font-weight: 700;" id="leg-caution">🟡 50–100% Warn (0.25–0.50mm)</span>
+                        <span style="color: #f97316; font-weight: 700;" id="leg-warn">🟠 100–200% Warn (0.50–1.00mm)</span>
+                        <span style="color: #ef4444; font-weight: 700;" id="leg-fail">🔴 &ge;Action Level (&ge;1.00mm)</span>
+                    </div>
+                </div>
+
+                <!-- Right Panel: Charts -->
+                <div style="display: flex; flex-direction: column; gap: 1rem;">
+                    
+                    <!-- Sag vs Track Index Bar Chart -->
+                    <div class="card">
+                        <div class="card-header">
+                            <div class="card-title">
+                                <span>📊</span> Geometric Sag Shift ΔX_sag (90° & 270°)
+                            </div>
+                        </div>
+                        <div style="height: 180px; position: relative;">
+                            <canvas id="canvas-discrepancy-chart"></canvas>
+                        </div>
+                    </div>
+
+                    <!-- Selected Track Sag vs Gantry Angle Plot -->
+                    <div class="card">
+                        <div class="card-header">
+                            <div class="card-title">
+                                <span>📈</span> Selected Track Sag Vector vs. Gantry Angle θ
+                            </div>
+                        </div>
+                        <div style="height: 170px; position: relative;">
+                            <canvas id="canvas-profile-chart"></canvas>
+                        </div>
+                    </div>
+
+                    <!-- EPID Panel Center Variation Plot -->
+                    <div class="card">
+                        <div class="card-header">
+                            <div class="card-title">
+                                <span>🎯</span> EPID Panel Center Shift ΔX_panel(θ) & ΔY_panel(θ) vs. Gantry Angle θ
+                            </div>
+                        </div>
+                        <div style="height: 170px; position: relative;">
+                            <canvas id="canvas-panel-center-chart"></canvas>
+                        </div>
+                    </div>
+
+                </div>
+
+            </div>
+
+            <!-- Detailed Breakdown Table Card -->
+            <div class="card" style="margin-top: 1rem;">
+                <div class="card-header" style="flex-wrap: wrap; gap: 0.5rem;">
+                    <div class="card-title">
+                        <span>📋</span> Detailed Anti-Gravity QC Breakdown
+                    </div>
+
+                    <!-- Halcyon Leaf Bank Filter Tabs (Distal SX2 vs Proximal SX1 vs All Tracks) -->
+                    <div class="view-tabs" id="bank-filter-tabs">
+                        <button type="button" id="btn-bank-distal" class="tab-btn active" title="Show Distal MLC Bank (SX2 - 29 Leaf Pairs)">🔹 Distal Bank (SX2 - 29 Pairs)</button>
+                        <button type="button" id="btn-bank-proximal" class="tab-btn" title="Show Proximal MLC Bank (SX1 - 28 Leaf Pairs)">🔸 Proximal Bank (SX1 - 28 Pairs)</button>
+                        <button type="button" id="btn-bank-all" class="tab-btn" title="Show All Staggered Tracks Combined (57 Pairs)">🌐 All Tracks (57 Pairs)</button>
+                    </div>
+
+                    <!-- Table View Mode Tabs (Slit Center vs Individual Leaf Banks) -->
+                    <div class="view-tabs" id="table-view-tabs">
+                        <button type="button" id="tab-table-center" class="tab-btn" title="Show Pair Slit Center Gravitational Sag">📐 Pair Slit Center View</button>
+                        <button type="button" id="tab-table-leaf" class="tab-btn active" title="Show Independent Bank A Left vs Bank B Right Leaf Sags">🍃 Individual Leaf Bank View</button>
+                    </div>
+                </div>
+
+                <!-- Math Tally Explainer Banner -->
+                <div style="background: rgba(15, 23, 42, 0.6); border: 1px solid var(--border-color); border-radius: 6px; padding: 0.75rem; margin-bottom: 0.75rem; font-size: 0.8rem; color: #94a3b8;">
+                    <div style="font-weight: 700; color: #00f2fe; margin-bottom: 0.25rem;">
+                        💡 How Raw Leaf Positions Tally with Net Gravitational Sag (Sag_90):
+                    </div>
+                    <div>
+                        • <strong>Raw Leaf Positions (X_left, X_right)</strong> include EPID panel flex and beam magnification. <br>
+                        • <strong>True Leaf Position</strong>: \(X_{\text{true}}(\theta) = \left[X_{\text{raw}}(\theta) - \Delta X_{\text{panel}}(\theta)\right] \times k_{\text{mag}}(\theta)\) <br>
+                        • <strong>Individual Leaf Sag</strong>: \(\text{Sag}_{\text{left}}(90^\circ) = X_{\text{true\_left}}(90^\circ) - X_{\text{true\_left}}(0^\circ)\) | \(\text{Sag}_{\text{right}}(90^\circ) = X_{\text{true\_right}}(90^\circ) - X_{\text{true\_right}}(0^\circ)\)
+                    </div>
+                </div>
+
+                <div class="table-container">
+                    <table id="table-leaf-results">
+                        <thead id="table-head">
+                            <!-- Dynamic headers based on View Mode -->
+                        </thead>
+                        <tbody>
+                            <!-- Populated dynamically -->
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            <!-- Per-Leaf Inspection Details Modal Card -->
+            <div id="per-leaf-modal" class="card" style="margin-top: 1rem; display: none; border: 1px solid #00f2fe;">
+                <div class="card-header" style="background: rgba(0, 242, 254, 0.1);">
+                    <div class="card-title" style="color: #00f2fe;" id="modal-track-title">
+                        🔍 Per-Leaf Inspection Details - Track #1
+                    </div>
+                    <button type="button" id="btn-close-modal" class="btn btn-secondary" style="padding: 0.2rem 0.5rem; font-size: 0.75rem;">✕ Close</button>
+                </div>
+                <div id="modal-track-content" style="padding: 1rem; font-size: 0.85rem; color: #f8fafc; display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 1rem;">
+                    <!-- Populated dynamically when clicking any table row or image track -->
+                </div>
+            </div>
+
+        </div>
+
+        <!-- SECTION 2: SIMULATION & FAULT GENERATOR ENGINE PIPELINE -->
+        <div id="section-simulator" style="display: none;">
+            
+            <div class="main-grid">
+                
+                <!-- Controls Panel -->
+                <div class="card">
+                    <div class="card-header">
+                        <div class="card-title">
+                            <span>⚡</span> Hardware Fault Injector Controls
+                        </div>
+                    </div>
+
+                    <div style="display: flex; flex-direction: column; gap: 1rem;">
+                        <div class="input-group">
+                            <label for="sim-gantry-angle">Gantry Angle (°)</label>
+                            <input type="number" id="sim-gantry-angle" value="90.0" step="15" min="0" max="360">
+                        </div>
+
+                        <div class="input-group">
+                            <label for="sim-sag-amp">Gravitational Sag Amplitude S_i (mm)</label>
+                            <input type="number" id="sim-sag-amp" value="1.2" step="0.1" min="0">
+                        </div>
+
+                        <div class="input-group">
+                            <label for="sim-stuck-leaf">Inject Stuck Leaf (Track Index)</label>
+                            <input type="number" id="sim-stuck-leaf" value="10" min="1" max="60">
+                        </div>
+
+                        <div class="input-group">
+                            <label for="sim-stuck-pos">Stuck Position (mm)</label>
+                            <input type="number" id="sim-stuck-pos" value="25.0" step="1.0">
+                        </div>
+
+                        <div class="input-group">
+                            <label for="sim-cal-offset-leaf">Inject Calibration Offset (Track Index)</label>
+                            <input type="number" id="sim-cal-offset-leaf" value="15" min="1" max="60">
+                        </div>
+
+                        <div class="input-group">
+                            <label for="sim-cal-offset-mm">Calibration Offset Shift (mm)</label>
+                            <input type="number" id="sim-cal-offset-mm" value="0.8" step="0.1">
+                        </div>
+
+                        <div class="input-group">
+                            <label for="sim-noise-std">Gaussian Noise Level (std)</label>
+                            <input type="number" id="sim-noise-std" value="200" step="50" min="0">
+                        </div>
+
+                        <button type="button" id="btn-run-simulation" class="btn">
+                            <span>⚡</span> Generate Synthetic Image & Test Faults
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Simulation Preview Image -->
+                <div class="card">
+                    <div class="card-header">
+                        <div class="card-title">
+                            <span>🖥️</span> Generated Synthetic EPID RTIMAGE Preview
+                        </div>
+                    </div>
+
+                    <div class="canvas-container" style="display: flex; align-items: center; justify-content: center; background: #000;">
+                        <img id="sim-preview-img" style="max-width: 100%; max-height: 100%; object-fit: contain; display: none;" />
+                        <div id="sim-preview-placeholder" style="color: #94a3b8; font-size: 0.9rem;">
+                            Click "Generate Synthetic Image" to preview injected faults.
+                        </div>
+                    </div>
+                </div>
+
+            </div>
+
+        </div>
+
+        <!-- SECTION 3: LINAC PSEUDO-FLUENCE MAP & MV IMAGER SIMULATOR -->
+        <div id="section-fluence" style="display: none;">
+            
+            <div class="main-grid">
+                
+                <!-- Controls Panel -->
+                <div class="card">
+                    <div class="card-header">
+                        <div class="card-title">
+                            <span>🌌</span> DICOM RT Plan Field & Fluence Generator
+                        </div>
+                    </div>
+
+                    <div style="display: flex; flex-direction: column; gap: 1rem;">
+                        
+                        <div class="input-group">
+                            <label for="select-rtplan-file">Select DICOM RT Plan (.dcm)</label>
+                            <select id="select-rtplan-file">
+                                <option value="gravityplanactual.dcm">gravityplanactual.dcm (Real Halcyon Grav Plan - 15 Fields)</option>
+                                <option value="sampleplan.dcm">sampleplan.dcm (Real Machine Halcyon Plan)</option>
+                                <option value="sample_data/halcyon_sag_qc_plan.dcm">halcyon_sag_qc_plan.dcm (Sample QA Plan)</option>
+                                <option value="sample_data/modified_halcyon_plan.dcm">modified_halcyon_plan.dcm (Fault Plan)</option>
+                            </select>
+                        </div>
+
+                        <div class="input-group">
+                            <label for="input-rtplan-file" style="cursor: pointer; font-size: 0.8rem; color: #00f2fe;">
+                                📤 Or Upload Custom DICOM RT Plan (.dcm)
+                            </label>
+                            <input type="file" id="input-rtplan-file" accept=".dcm" style="font-size: 0.8rem;">
+                        </div>
+
+                        <div class="input-group">
+                            <label for="select-rtplan-beam">Select Field / Beam in Plan</label>
+                            <select id="select-rtplan-beam">
+                                <!-- Populated dynamically from /api/plan-info -->
+                            </select>
+                        </div>
+
+                        <div class="input-group">
+                            <label for="fluence-focal-sigma">Linac Focal Spot Blur σ (px)</label>
+                            <input type="number" id="fluence-focal-sigma" value="1.0" step="0.2" min="0.2">
+                        </div>
+
+                        <div class="input-group">
+                            <label for="fluence-leaf-trans">MLC Leaf Transmission Factor</label>
+                            <input type="number" id="fluence-leaf-trans" value="0.13" step="0.01" min="0.01" max="0.30">
+                        </div>
+
+                        <div style="display: flex; gap: 0.75rem; flex-direction: column;">
+                            <button type="button" id="btn-generate-fluence" class="btn">
+                                <span>🌌</span> Simulate Selected Field Image
+                            </button>
+                            <button type="button" id="btn-simulate-all-fields" class="btn btn-secondary">
+                                <span>📑</span> Batch Simulate All Fields in Plan
+                            </button>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Single Field Preview Card -->
+                <div class="card">
+                    <div class="card-header">
+                        <div class="card-title">
+                            <span>📷</span> Selected Field Image Preview
+                        </div>
+                        <div style="display: flex; gap: 0.5rem; align-items: center;">
+                            <button type="button" id="btn-download-fluence-dcm" class="btn btn-secondary" style="display: none; padding: 0.25rem 0.6rem; font-size: 0.78rem;">
+                                💾 Save DICOM (.dcm)
+                            </button>
+                        </div>
+                    </div>
+
+                    <div style="padding: 0.5rem; background: #0f172a; border-radius: 6px; margin-bottom: 0.5rem; font-size: 0.8rem; color: #94a3b8;" id="fluence-meta-box">
+                        Plan: <strong>None Loaded</strong> | Control Points: <strong>--</strong> | Gantry: <strong>--°</strong>
+                    </div>
+
+                    <div class="canvas-container" style="display: flex; align-items: center; justify-content: center; background: #000;">
+                        <img id="fluence-preview-img" style="max-width: 100%; max-height: 100%; object-fit: contain; display: none;" />
+                        <div id="fluence-preview-placeholder" style="color: #94a3b8; font-size: 0.9rem;">
+                            Select a Field and click "Simulate Selected Field Image".
+                        </div>
+                    </div>
+                </div>
+
+            </div>
+
+            <!-- All Fields Batch Gallery Container -->
+            <div id="all-fields-gallery-card" class="card" style="margin-top: 1rem; display: none;">
+                <div class="card-header">
+                    <div class="card-title">
+                        <span>📑</span> All Plan Fields Output Gallery (One Image Per Field)
+                    </div>
+                </div>
+
+                <div id="all-fields-gallery-grid" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 1rem; margin-top: 0.5rem;">
+                    <!-- Populated dynamically -->
+                </div>
+            </div>
+
+        </div>
+
+        <!-- SECTION 4: SETTINGS & QATRACK+ REST API CONFIGURATION -->
+        <div id="section-settings" style="display: none;">
+            
+            <div class="main-grid">
+                
+                <!-- QATrack+ Connection Card -->
+                <div class="card">
+                    <div class="card-header">
+                        <div class="card-title">
+                            <span>🔌</span> QATrack+ REST API Server Connection
+                        </div>
+                    </div>
+
+                    <div style="display: flex; flex-direction: column; gap: 1rem; padding: 0.5rem 0;">
+                        <div class="input-group">
+                            <label for="setting-qatrack-url" style="color: #00f2fe; font-weight: 700;">QATrack+ Server Base URL</label>
+                            <input type="text" id="setting-qatrack-url" value="http://localhost:8000" placeholder="e.g. http://qatrack.local:8000 or https://qatrack.hospital.org">
+                        </div>
+
+                        <div class="input-group">
+                            <label for="setting-qatrack-token" style="color: #a855f7; font-weight: 700;">API Authentication Token (Optional)</label>
+                            <input type="password" id="setting-qatrack-token" value="" placeholder="e.g. 9944b09199c62bcf9418ad846dd0e4bbdfc6ee4b">
+                        </div>
+
+                        <div class="input-group">
+                            <label for="setting-qatrack-unit" style="color: #f8fafc; font-weight: 700;">Target Linac Unit ID / Slug</label>
+                            <input type="text" id="setting-qatrack-unit" value="Halcyon_1" placeholder="e.g. Ethos_1 or TrueBeam_2">
+                        </div>
+
+                        <div class="input-group">
+                            <label for="setting-qatrack-testlist" style="color: #f8fafc; font-weight: 700;">Test List Name / Slug</label>
+                            <input type="text" id="setting-qatrack-testlist" value="anti_gravity_mlc_qc" placeholder="e.g. anti_gravity_mlc_qc">
+                        </div>
+
+                        <div style="display: flex; gap: 0.75rem; flex-wrap: wrap;">
+                            <button type="button" id="btn-test-qatrack-conn" class="btn btn-secondary" style="border-color: #00f2fe; color: #00f2fe;">
+                                🔌 Test Connection
+                            </button>
+                            <button type="button" id="btn-save-qatrack-settings" class="btn" style="background: linear-gradient(135deg, #10b981, #059669); color: #fff;">
+                                💾 Save Settings
+                            </button>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Test Macro Mappings Card -->
+                <div class="card">
+                    <div class="card-header">
+                        <div class="card-title">
+                            <span>📑</span> QATrack+ Test Macro Mappings
+                        </div>
+                    </div>
+
+                    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 0.85rem; padding: 0.5rem 0;">
+                        <div class="input-group">
+                            <label for="setting-macro-max-sag">Max Slit Sag (mm)</label>
+                            <input type="text" id="setting-macro-max-sag" value="sag_max_mm">
+                        </div>
+
+                        <div class="input-group">
+                            <label for="setting-macro-max-leaf-sag">Max Individual Leaf Sag (mm)</label>
+                            <input type="text" id="setting-macro-max-leaf-sag" value="sag_max_leaf_mm">
+                        </div>
+
+                        <div class="input-group">
+                            <label for="setting-macro-pass-rate">Pass Rate (%)</label>
+                            <input type="text" id="setting-macro-pass-rate" value="pass_rate_pct">
+                        </div>
+
+                        <div class="input-group">
+                            <label for="setting-macro-dlg-baseline">0° Baseline DLG (mm)</label>
+                            <input type="text" id="setting-macro-dlg-baseline" value="dlg_0deg_mm">
+                        </div>
+
+                        <div class="input-group">
+                            <label for="setting-macro-max-fluence">Max Dosimetric Delta (%)</label>
+                            <input type="text" id="setting-macro-max-fluence" value="max_fluence_delta_pct">
+                        </div>
+
+                        <div class="input-group">
+                            <label for="setting-macro-qc-status">Overall QC Status (PASS/FAIL)</label>
+                            <input type="text" id="setting-macro-qc-status" value="qc_status">
+                        </div>
+                    </div>
+
+                    <!-- Push Execution Status Box -->
+                    <div style="margin-top: 1rem; padding: 0.75rem; background: #0f172a; border-radius: 6px; border: 1px solid #1e293b;">
+                        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.4rem;">
+                            <span style="font-weight: 700; color: #00f2fe; font-size: 0.82rem;">🚀 Push Execution & Payload Log</span>
+                            <button type="button" id="btn-push-qatrack-now" class="btn" style="padding: 0.3rem 0.8rem; font-size: 0.78rem; background: linear-gradient(135deg, #00f2fe, #0284c7); color: #0f172a; font-weight: 700;">
+                                🚀 Push Current Results Now
+                            </button>
+                        </div>
+                        <pre id="qatrack-log-output" style="background: #050811; padding: 0.6rem; border-radius: 4px; font-family: monospace; font-size: 0.75rem; color: #34d399; max-height: 140px; overflow-y: auto; margin: 0;">(Click 'Push Current Results Now' or 'Push to QATrack+' after running an analysis to view transmission logs)</pre>
+                    </div>
+                </div>
+
+            </div>
+
+        </div>
+
+    </div>
+
+    <!-- Scripts with Cache Busting -->
+    <script src="/static/js/viewer.js?v=5.0"></script>
+    <script src="/static/js/mlc_charts.js?v=5.0"></script>
+    <script src="/static/js/simulator_ui.js?v=5.0"></script>
+    <script src="/static/js/app.js?v=5.0"></script>
+</body>
+</html>
