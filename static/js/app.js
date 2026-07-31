@@ -171,6 +171,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const settingQATrackToken = document.getElementById('setting-qatrack-token');
     const settingQATrackUnit = document.getElementById('setting-qatrack-unit');
     const settingQATrackTestList = document.getElementById('setting-qatrack-testlist');
+    const settingQATrackUTC = document.getElementById('setting-qatrack-utc');
 
     const settingMacroMaxSag = document.getElementById('setting-macro-max-sag');
     const settingMacroMaxLeafSag = document.getElementById('setting-macro-max-leaf-sag');
@@ -421,6 +422,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     if (settingQATrackToken) settingQATrackToken.value = s.qatrack_token || '';
                     if (settingQATrackUnit) settingQATrackUnit.value = s.unit_name || 'Halcyon_1';
                     if (settingQATrackTestList) settingQATrackTestList.value = s.test_list_slug || 'anti_gravity_mlc_qc';
+                    if (settingQATrackUTC) settingQATrackUTC.value = s.unit_test_collection || '';
 
                     if (settingMacroMaxSag) settingMacroMaxSag.value = s.macro_max_sag || 'sag_max_mm';
                     if (settingMacroMaxLeafSag) settingMacroMaxLeafSag.value = s.macro_max_leaf_sag || 'sag_max_leaf_mm';
@@ -438,6 +440,7 @@ document.addEventListener('DOMContentLoaded', () => {
             qatrack_token: settingQATrackToken ? settingQATrackToken.value.trim() : '',
             unit_name: settingQATrackUnit ? settingQATrackUnit.value.trim() : '',
             test_list_slug: settingQATrackTestList ? settingQATrackTestList.value.trim() : '',
+            unit_test_collection: settingQATrackUTC ? settingQATrackUTC.value.trim() : '',
             macro_max_sag: settingMacroMaxSag ? settingMacroMaxSag.value.trim() : 'sag_max_mm',
             macro_max_leaf_sag: settingMacroMaxLeafSag ? settingMacroMaxLeafSag.value.trim() : 'sag_max_leaf_mm',
             macro_pass_rate: settingMacroPassRate ? settingMacroPassRate.value.trim() : 'pass_rate_pct',
@@ -464,7 +467,8 @@ document.addEventListener('DOMContentLoaded', () => {
             qatrack_url: settingQATrackUrl ? settingQATrackUrl.value.trim() : '',
             qatrack_token: settingQATrackToken ? settingQATrackToken.value.trim() : '',
             unit_name: settingQATrackUnit ? settingQATrackUnit.value.trim() : '',
-            test_list_slug: settingQATrackTestList ? settingQATrackTestList.value.trim() : ''
+            test_list_slug: settingQATrackTestList ? settingQATrackTestList.value.trim() : '',
+            unit_test_collection: settingQATrackUTC ? settingQATrackUTC.value.trim() : ''
         };
 
         if (qatrackLogOutput) qatrackLogOutput.textContent = "Testing connection to QATrack+ REST API...";

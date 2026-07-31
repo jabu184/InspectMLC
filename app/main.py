@@ -13,7 +13,7 @@ import random
 import json
 import urllib.request
 import urllib.error
-from datetime import datetime
+from datetime import datetime, timedelta
 import numpy as np
 import pydicom
 from PIL import Image
@@ -413,6 +413,7 @@ def load_qatrack_settings():
         "qatrack_token": "",
         "unit_name": "Halcyon_1",
         "test_list_slug": "anti_gravity_mlc_qc",
+        "unit_test_collection": "",
         "macro_max_sag": "sag_max_mm",
         "macro_max_leaf_sag": "sag_max_leaf_mm",
         "macro_pass_rate": "pass_rate_pct",
@@ -430,6 +431,7 @@ class QATrackSettingsModel(BaseModel):
     qatrack_token: Optional[str] = ""
     unit_name: str = "Halcyon_1"
     test_list_slug: str = "anti_gravity_mlc_qc"
+    unit_test_collection: Optional[str] = ""
     macro_max_sag: str = "sag_max_mm"
     macro_max_leaf_sag: str = "sag_max_leaf_mm"
     macro_pass_rate: str = "pass_rate_pct"
@@ -544,12 +546,22 @@ def push_qatrack_results_endpoint(req: PushQATrackRequest):
         settings.get("macro_qc_status", "qc_status"): {"val": status_str}
     }
 
+    now_dt = datetime.now()
+    now_str = now_dt.strftime("%Y-%m-%d %H:%M:%S")
+    start_str = (now_dt - timedelta(minutes=1)).strftime("%Y-%m-%d %H:%M:%S")
+
+    utc_val = settings.get("unit_test_collection") or settings.get("test_list_slug", "anti_gravity_mlc_qc")
+    if isinstance(utc_val, str) and utc_val.strip().isdigit():
+        utc_val = int(utc_val.strip())
+
     payload = {
         "unit": settings.get("unit_name", "Halcyon_1"),
         "test_list": settings.get("test_list_slug", "anti_gravity_mlc_qc"),
-        "work_completed": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-        "status": status_str,
+        "unit_test_collection": utc_val,
+        "work_started": start_str,
+        "work_completed": now_str,
         "results": results_payload,
+        "tests": results_payload,
         "comment": f"Auto-pushed from Anti-Gravity QC Engine (Linac: {summary.get('machine_type', 'HALCYON')})"
     }
 
