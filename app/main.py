@@ -518,8 +518,14 @@ class PushQATrackRequest(BaseModel):
 @app.post("/api/push-qatrack-results")
 def push_qatrack_results_endpoint(req: PushQATrackRequest):
     settings = load_qatrack_settings()
-    base_url = settings.get("qatrack_url", "http://localhost:8000").rstrip("/")
+    raw_url = settings.get("qatrack_url", "http://localhost:8000").strip()
+    base_url = raw_url.rstrip("/")
     
+    # Strip GET-only suffixes if user pasted a test-lists endpoint in settings
+    for get_suffix in ["/test-lists", "/test-lists/", "/testlists", "/testlists/"]:
+        if base_url.endswith(get_suffix):
+            base_url = base_url[:-len(get_suffix)].rstrip("/")
+
     summary = req.summary
     max_sag = float(summary.get("max_sag_amplitude_mm", 0.0))
     max_leaf_sag = float(summary.get("max_individual_leaf_sag_mm", max_sag))
@@ -548,22 +554,38 @@ def push_qatrack_results_endpoint(req: PushQATrackRequest):
     }
 
     candidate_urls = []
-    if "/api/" in base_url or base_url.endswith("/test-list-instances") or base_url.endswith("/unittestcollections"):
+    if base_url.endswith("/unittestcollections") or base_url.endswith("/test-list-instances") or base_url.endswith("/testlistinstances"):
         candidate_urls.append(base_url if base_url.endswith("/") else base_url + "/")
 
     root_host = base_url.split("/api")[0].rstrip("/") if "/api" in base_url else base_url
-    std_paths = [
-        "/api/qa/test-list-instances/",
-        "/api/v1/qa/test-list-instances/",
+    api_prefix = ""
+    if "/api/v1" in base_url:
+        api_prefix = "/api/v1"
+    elif "/api" in base_url:
+        api_prefix = "/api"
+
+    std_paths = []
+    if api_prefix:
+        std_paths.extend([
+            f"{api_prefix}/qa/unittestcollections/",
+            f"{api_prefix}/qa/test-list-instances/",
+            f"{api_prefix}/unittestcollections/",
+            f"{api_prefix}/test-list-instances/",
+        ])
+
+    std_paths.extend([
         "/api/qa/unittestcollections/",
         "/api/v1/qa/unittestcollections/",
+        "/api/qa/test-list-instances/",
+        "/api/v1/qa/test-list-instances/",
         "/api/unittestcollections/",
         "/api/v1/unittestcollections/",
         "/api/qa/testlistinstances/",
         "/api/v1/qa/testlistinstances/"
-    ]
+    ])
+
     for path in std_paths:
-        full = root_host + path
+        full = path if path.startswith("http") else root_host + path
         if full not in candidate_urls:
             candidate_urls.append(full)
 
@@ -599,8 +621,8 @@ def push_qatrack_results_endpoint(req: PushQATrackRequest):
         except urllib.error.HTTPError as http_err:
             err_body = http_err.read().decode("utf-8", errors="ignore")
             last_err_msg = f"HTTP {http_err.code} ({http_err.reason}): {err_body[:300]}"
-            if http_err.code == 404:
-                logger.info(f"QATrack+ candidate endpoint '{url}' returned 404. Trying next candidate...")
+            if http_err.code in (404, 405):
+                logger.info(f"QATrack+ candidate endpoint '{url}' returned {http_err.code}. Trying next candidate...")
                 continue
 
             return {
