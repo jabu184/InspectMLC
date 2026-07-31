@@ -457,12 +457,25 @@ def update_settings_endpoint(settings: QATrackSettingsModel):
 @app.post("/api/test-qatrack-connection")
 def test_qatrack_connection_endpoint(settings: QATrackSettingsModel):
     base_url = settings.qatrack_url.rstrip("/")
-    candidate_urls = [
-        f"{base_url}/api/v1/qa/test-lists/",
-        f"{base_url}/api/qa/test-lists/",
-        f"{base_url}/api/unittestcollections/",
-        base_url
+    
+    candidate_urls = []
+    if "/api/" in base_url:
+        candidate_urls.append(base_url if base_url.endswith("/") else base_url + "/")
+
+    root_host = base_url.split("/api")[0].rstrip("/") if "/api" in base_url else base_url
+    std_paths = [
+        "/api/qa/test-lists/",
+        "/api/v1/qa/test-lists/",
+        "/api/qa/unittestcollections/",
+        "/api/v1/qa/unittestcollections/",
+        "/api/test-lists/",
+        root_host
     ]
+    for path in std_paths:
+        full = path if path.startswith("http") else root_host + path
+        if full not in candidate_urls:
+            candidate_urls.append(full)
+
     headers = {
         "Content-Type": "application/json",
         "Accept": "application/json"
@@ -489,12 +502,14 @@ def test_qatrack_connection_endpoint(settings: QATrackSettingsModel):
                     "message": f"QATrack+ Authentication Failed ({last_err}). Please verify your API Token.",
                     "http_status": http_err.code
                 }
+            if http_err.code == 404:
+                continue
         except Exception as err:
             last_err = str(err)
 
     return {
         "status": "error",
-        "message": f"Could not reach QATrack+ server ({settings.qatrack_url}). Error: {last_err}"
+        "message": f"Could not connect to QATrack+ server ({settings.qatrack_url}). Error: {last_err}"
     }
 
 class PushQATrackRequest(BaseModel):
@@ -532,11 +547,25 @@ def push_qatrack_results_endpoint(req: PushQATrackRequest):
         "comment": f"Auto-pushed from Anti-Gravity QC Engine (Linac: {summary.get('machine_type', 'HALCYON')})"
     }
 
-    candidate_urls = [
-        f"{base_url}/api/v1/qa/test-list-instances/",
-        f"{base_url}/api/qa/test-list-instances/",
-        f"{base_url}/api/unittestcollections/"
+    candidate_urls = []
+    if "/api/" in base_url or base_url.endswith("/test-list-instances") or base_url.endswith("/unittestcollections"):
+        candidate_urls.append(base_url if base_url.endswith("/") else base_url + "/")
+
+    root_host = base_url.split("/api")[0].rstrip("/") if "/api" in base_url else base_url
+    std_paths = [
+        "/api/qa/test-list-instances/",
+        "/api/v1/qa/test-list-instances/",
+        "/api/qa/unittestcollections/",
+        "/api/v1/qa/unittestcollections/",
+        "/api/unittestcollections/",
+        "/api/v1/unittestcollections/",
+        "/api/qa/testlistinstances/",
+        "/api/v1/qa/testlistinstances/"
     ]
+    for path in std_paths:
+        full = root_host + path
+        if full not in candidate_urls:
+            candidate_urls.append(full)
 
     headers = {
         "Content-Type": "application/json",
@@ -547,8 +576,10 @@ def push_qatrack_results_endpoint(req: PushQATrackRequest):
 
     json_bytes = json.dumps(payload).encode("utf-8")
     last_err_msg = ""
+    attempted_urls = []
 
     for url in candidate_urls:
+        attempted_urls.append(url)
         try:
             h_req = urllib.request.Request(url, data=json_bytes, headers=headers, method="POST")
             with urllib.request.urlopen(h_req, timeout=10) as resp:
@@ -561,26 +592,32 @@ def push_qatrack_results_endpoint(req: PushQATrackRequest):
                 return {
                     "status": "success",
                     "message": f"Successfully pushed results to QATrack+ ({settings.get('unit_name')} / {settings.get('test_list_slug')})",
+                    "endpoint_used": url,
                     "payload_sent": payload,
                     "qatrack_response": resp_data
                 }
         except urllib.error.HTTPError as http_err:
             err_body = http_err.read().decode("utf-8", errors="ignore")
             last_err_msg = f"HTTP {http_err.code} ({http_err.reason}): {err_body[:300]}"
-            if http_err.code in [400, 401, 403, 404]:
-                return {
-                    "status": "error",
-                    "message": f"QATrack+ Push Failed ({last_err_msg})",
-                    "payload_sent": payload,
-                    "http_status": http_err.code,
-                    "details": err_body
-                }
+            if http_err.code == 404:
+                logger.info(f"QATrack+ candidate endpoint '{url}' returned 404. Trying next candidate...")
+                continue
+
+            return {
+                "status": "error",
+                "message": f"QATrack+ Push Error ({last_err_msg})",
+                "endpoint_used": url,
+                "payload_sent": payload,
+                "http_status": http_err.code,
+                "details": err_body
+            }
         except Exception as push_err:
             last_err_msg = str(push_err)
 
     return {
         "status": "error",
-        "message": f"QATrack+ Push Failed: Could not connect to {base_url}. Error: {last_err_msg}",
+        "message": f"QATrack+ Push Failed: None of the candidate endpoints succeeded on {base_url}. Error: {last_err_msg}",
+        "attempted_urls": attempted_urls,
         "payload_sent": payload
     }
 
