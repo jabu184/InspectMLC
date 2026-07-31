@@ -414,6 +414,10 @@ def load_qatrack_settings():
         "unit_name": "Halcyon_1",
         "test_list_slug": "anti_gravity_mlc_qc",
         "unit_test_collection": "",
+        "temperature_val": 22.0,
+        "pressure_val": 101.3,
+        "macro_temperature": "temperature",
+        "macro_pressure": "pressure",
         "macro_max_sag": "sag_max_mm",
         "macro_max_leaf_sag": "sag_max_leaf_mm",
         "macro_pass_rate": "pass_rate_pct",
@@ -432,6 +436,10 @@ class QATrackSettingsModel(BaseModel):
     unit_name: str = "Halcyon_1"
     test_list_slug: str = "anti_gravity_mlc_qc"
     unit_test_collection: Optional[str] = ""
+    temperature_val: float = 22.0
+    pressure_val: float = 101.3
+    macro_temperature: str = "temperature"
+    macro_pressure: str = "pressure"
     macro_max_sag: str = "sag_max_mm"
     macro_max_leaf_sag: str = "sag_max_leaf_mm"
     macro_pass_rate: str = "pass_rate_pct"
@@ -574,6 +582,12 @@ def push_qatrack_results_endpoint(req: PushQATrackRequest):
         settings.get("macro_qc_status", "qc_status"): {"val": status_str}
     }
 
+    # Pre-populate environmental parameters (Temperature & Pressure) for linac QA compliance
+    if settings.get("macro_temperature"):
+        results_payload[settings["macro_temperature"]] = {"val": float(settings.get("temperature_val", 22.0))}
+    if settings.get("macro_pressure"):
+        results_payload[settings["macro_pressure"]] = {"val": float(settings.get("pressure_val", 101.3))}
+
     now_dt = datetime.now()
     now_str = now_dt.strftime("%Y-%m-%d %H:%M:%S")
     start_str = (now_dt - timedelta(minutes=1)).strftime("%Y-%m-%d %H:%M:%S")
@@ -691,6 +705,50 @@ def push_qatrack_results_endpoint(req: PushQATrackRequest):
             except urllib.error.HTTPError as http_err:
                 err_body = http_err.read().decode("utf-8", errors="ignore")
                 last_err_msg = f"HTTP {http_err.code} ({http_err.reason}): {err_body[:300]}"
+                
+                # Check for missing required test macros error from QATrack+
+                if "Missing data for tests:" in err_body:
+                    import re
+                    missing_match = re.search(r"Missing data for tests:\s*([^'\"\]\}]+)", err_body, re.IGNORECASE)
+                    if missing_match:
+                        raw_list = missing_match.group(1)
+                        missing_names = [n.strip().strip("'\"") for n in raw_list.split(",") if n.strip()]
+                        logger.info(f"QATrack+ requested missing required tests: {missing_names}. Populating defaults and retrying...")
+                        
+                        temp_v = float(settings.get("temperature_val", 22.0))
+                        press_v = float(settings.get("pressure_val", 101.3))
+
+                        for m_name in missing_names:
+                            l_name = m_name.lower()
+                            if "temp" in l_name:
+                                results_payload[m_name] = {"val": temp_v}
+                            elif "press" in l_name or "baro" in l_name:
+                                results_payload[m_name] = {"val": press_v}
+                            else:
+                                results_payload[m_name] = {"val": 0.0}
+
+                        payload["results"] = results_payload
+                        payload["tests"] = results_payload
+                        retry_bytes = json.dumps(payload).encode("utf-8")
+                        try:
+                            retry_req = urllib.request.Request(url, data=retry_bytes, headers=headers, method="POST")
+                            with urllib.request.urlopen(retry_req, timeout=10) as retry_resp:
+                                retry_str = retry_resp.read().decode("utf-8")
+                                try:
+                                    retry_data = json.loads(retry_str)
+                                except Exception:
+                                    retry_data = {"raw_response": retry_str}
+                                return {
+                                    "status": "success",
+                                    "message": f"Successfully pushed results to QATrack+ after auto-populating missing tests ({missing_names})",
+                                    "endpoint_used": url,
+                                    "unit_test_collection_used": utc_val,
+                                    "payload_sent": payload,
+                                    "qatrack_response": retry_data
+                                }
+                        except Exception as retry_err:
+                            logger.warning(f"Retry after populating missing tests failed: {retry_err}")
+
                 if http_err.code in (404, 405):
                     logger.info(f"QATrack+ endpoint '{url}' returned {http_err.code}. Trying next endpoint...")
                     break

@@ -173,6 +173,9 @@ document.addEventListener('DOMContentLoaded', () => {
     const settingQATrackTestList = document.getElementById('setting-qatrack-testlist');
     const settingQATrackUTC = document.getElementById('setting-qatrack-utc');
 
+    const settingTempVal = document.getElementById('setting-temp-val');
+    const settingPressVal = document.getElementById('setting-press-val');
+
     const settingMacroMaxSag = document.getElementById('setting-macro-max-sag');
     const settingMacroMaxLeafSag = document.getElementById('setting-macro-max-leaf-sag');
     const settingMacroPassRate = document.getElementById('setting-macro-pass-rate');
@@ -424,6 +427,9 @@ document.addEventListener('DOMContentLoaded', () => {
                     if (settingQATrackTestList) settingQATrackTestList.value = s.test_list_slug || 'anti_gravity_mlc_qc';
                     if (settingQATrackUTC) settingQATrackUTC.value = s.unit_test_collection || '';
 
+                    if (settingTempVal) settingTempVal.value = s.temperature_val !== undefined ? s.temperature_val : 22.0;
+                    if (settingPressVal) settingPressVal.value = s.pressure_val !== undefined ? s.pressure_val : 101.3;
+
                     if (settingMacroMaxSag) settingMacroMaxSag.value = s.macro_max_sag || 'sag_max_mm';
                     if (settingMacroMaxLeafSag) settingMacroMaxLeafSag.value = s.macro_max_leaf_sag || 'sag_max_leaf_mm';
                     if (settingMacroPassRate) settingMacroPassRate.value = s.macro_pass_rate || 'pass_rate_pct';
@@ -441,6 +447,10 @@ document.addEventListener('DOMContentLoaded', () => {
             unit_name: settingQATrackUnit ? settingQATrackUnit.value.trim() : '',
             test_list_slug: settingQATrackTestList ? settingQATrackTestList.value.trim() : '',
             unit_test_collection: settingQATrackUTC ? settingQATrackUTC.value.trim() : '',
+            temperature_val: settingTempVal ? parseFloat(settingTempVal.value) || 22.0 : 22.0,
+            pressure_val: settingPressVal ? parseFloat(settingPressVal.value) || 101.3 : 101.3,
+            macro_temperature: 'temperature',
+            macro_pressure: 'pressure',
             macro_max_sag: settingMacroMaxSag ? settingMacroMaxSag.value.trim() : 'sag_max_mm',
             macro_max_leaf_sag: settingMacroMaxLeafSag ? settingMacroMaxLeafSag.value.trim() : 'sag_max_leaf_mm',
             macro_pass_rate: settingMacroPassRate ? settingMacroPassRate.value.trim() : 'pass_rate_pct',
