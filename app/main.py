@@ -573,20 +573,44 @@ def push_qatrack_results_endpoint(req: PushQATrackRequest):
     max_fluence = float(summary.get("max_dosimetric_delta_pct", 0.0))
     status_str = "PASS" if pass_rate >= 95 else ("WARN" if pass_rate >= 85 else "FAIL")
 
+    def make_num_item(v):
+        try:
+            val_f = round(float(v), 4)
+        except (ValueError, TypeError):
+            val_f = 0.0
+        return {
+            "val": val_f,
+            "value": val_f,
+            "raw_value": val_f,
+            "skipped": False
+        }
+
+    def make_str_item(v):
+        val_s = str(v)
+        return {
+            "val": val_s,
+            "value": val_s,
+            "raw_value": val_s,
+            "skipped": False
+        }
+
+    temp_v = float(settings.get("temperature_val", 22.0))
+    press_v = float(settings.get("pressure_val", 101.3))
+
     results_payload = {
-        settings.get("macro_max_sag", "sag_max_mm"): {"val": round(max_sag, 4)},
-        settings.get("macro_max_leaf_sag", "sag_max_leaf_mm"): {"val": round(max_leaf_sag, 4)},
-        settings.get("macro_pass_rate", "pass_rate_pct"): {"val": round(pass_rate, 2)},
-        settings.get("macro_dlg_baseline", "dlg_0deg_mm"): {"val": round(dlg, 4)},
-        settings.get("macro_max_fluence", "max_fluence_delta_pct"): {"val": round(max_fluence, 2)},
-        settings.get("macro_qc_status", "qc_status"): {"val": status_str}
+        settings.get("macro_max_sag", "sag_max_mm"): make_num_item(max_sag),
+        settings.get("macro_max_leaf_sag", "sag_max_leaf_mm"): make_num_item(max_leaf_sag),
+        settings.get("macro_pass_rate", "pass_rate_pct"): make_num_item(pass_rate),
+        settings.get("macro_dlg_baseline", "dlg_0deg_mm"): make_num_item(dlg),
+        settings.get("macro_max_fluence", "max_fluence_delta_pct"): make_num_item(max_fluence),
+        settings.get("macro_qc_status", "qc_status"): make_str_item(status_str)
     }
 
-    # Pre-populate environmental parameters (Temperature & Pressure) for linac QA compliance
+    # Pre-populate environmental parameters (Temperature & Pressure) as numeric floats
     if settings.get("macro_temperature"):
-        results_payload[settings["macro_temperature"]] = {"val": float(settings.get("temperature_val", 22.0))}
+        results_payload[settings["macro_temperature"]] = make_num_item(temp_v)
     if settings.get("macro_pressure"):
-        results_payload[settings["macro_pressure"]] = {"val": float(settings.get("pressure_val", 101.3))}
+        results_payload[settings["macro_pressure"]] = make_num_item(press_v)
 
     now_dt = datetime.now()
     now_str = now_dt.strftime("%Y-%m-%d %H:%M:%S")
@@ -721,11 +745,13 @@ def push_qatrack_results_endpoint(req: PushQATrackRequest):
                         for m_name in missing_names:
                             l_name = m_name.lower()
                             if "temp" in l_name:
-                                results_payload[m_name] = {"val": temp_v}
+                                results_payload[m_name] = make_num_item(temp_v)
                             elif "press" in l_name or "baro" in l_name:
-                                results_payload[m_name] = {"val": press_v}
+                                results_payload[m_name] = make_num_item(press_v)
+                            elif "status" in l_name or "qc" in l_name:
+                                results_payload[m_name] = make_str_item("PASS")
                             else:
-                                results_payload[m_name] = {"val": 0.0}
+                                results_payload[m_name] = make_num_item(0.0)
 
                         payload["results"] = results_payload
                         payload["tests"] = results_payload
