@@ -514,6 +514,34 @@ def test_qatrack_connection_endpoint(settings: QATrackSettingsModel):
         "message": f"Could not connect to QATrack+ server ({settings.qatrack_url}). Error: {last_err}"
     }
 
+def resolve_unit_test_collection_url(base_url: str, headers: dict, unit_name: str, test_list_slug: str) -> Optional[str]:
+    root_host = base_url.split("/api")[0].rstrip("/") if "/api" in base_url else base_url
+    candidate_get_urls = [
+        f"{root_host}/api/qa/unittestcollections/",
+        f"{root_host}/api/v1/qa/unittestcollections/",
+        f"{root_host}/api/unittestcollections/",
+        f"{base_url}/api/qa/unittestcollections/"
+    ]
+    for get_url in candidate_get_urls:
+        try:
+            req = urllib.request.Request(get_url, headers=headers)
+            with urllib.request.urlopen(req, timeout=5) as resp:
+                data = json.loads(resp.read().decode("utf-8"))
+                items = data if isinstance(data, list) else data.get("results", [])
+                for item in items:
+                    u = item.get("unit")
+                    tl = item.get("test_list")
+                    u_str = str(u.get("slug") if isinstance(u, dict) else (u.get("name") if isinstance(u, dict) else u)).lower()
+                    tl_str = str(tl.get("slug") if isinstance(tl, dict) else (tl.get("name") if isinstance(tl, dict) else tl)).lower()
+                    
+                    t_unit = unit_name.lower()
+                    t_tl = test_list_slug.lower()
+                    if (t_unit in u_str or u_str in t_unit) and (t_tl in tl_str or tl_str in t_tl):
+                        return item.get("url")
+        except Exception:
+            pass
+    return None
+
 class PushQATrackRequest(BaseModel):
     summary: Dict[str, Any]
 
@@ -550,31 +578,51 @@ def push_qatrack_results_endpoint(req: PushQATrackRequest):
     now_str = now_dt.strftime("%Y-%m-%d %H:%M:%S")
     start_str = (now_dt - timedelta(minutes=1)).strftime("%Y-%m-%d %H:%M:%S")
 
-    utc_val = settings.get("unit_test_collection") or settings.get("test_list_slug", "anti_gravity_mlc_qc")
-    if isinstance(utc_val, str) and utc_val.strip().isdigit():
-        utc_val = int(utc_val.strip())
-
-    payload = {
-        "unit": settings.get("unit_name", "Halcyon_1"),
-        "test_list": settings.get("test_list_slug", "anti_gravity_mlc_qc"),
-        "unit_test_collection": utc_val,
-        "work_started": start_str,
-        "work_completed": now_str,
-        "results": results_payload,
-        "tests": results_payload,
-        "comment": f"Auto-pushed from Anti-Gravity QC Engine (Linac: {summary.get('machine_type', 'HALCYON')})"
+    headers = {
+        "Content-Type": "application/json",
+        "Accept": "application/json"
     }
+    if settings.get("qatrack_token"):
+        headers["Authorization"] = f"Token {settings['qatrack_token']}"
+
+    unit_name = settings.get("unit_name", "Halcyon_1")
+    test_list_slug = settings.get("test_list_slug", "anti_gravity_mlc_qc")
+    user_utc = str(settings.get("unit_test_collection") or "").strip()
+
+    root_host = base_url.split("/api")[0].rstrip("/") if "/api" in base_url else base_url
+
+    # Query QATrack+ server to auto-resolve Hyperlinked URL for unit_test_collection
+    auto_utc_url = resolve_unit_test_collection_url(base_url, headers, unit_name, test_list_slug)
+
+    utc_variants = []
+    if auto_utc_url:
+        utc_variants.append(auto_utc_url)
+    if user_utc:
+        if user_utc.startswith("http"):
+            utc_variants.append(user_utc if user_utc.endswith("/") else user_utc + "/")
+        elif user_utc.isdigit():
+            utc_variants.append(f"{root_host}/api/qa/unittestcollections/{user_utc}/")
+            utc_variants.append(f"{root_host}/api/v1/qa/unittestcollections/{user_utc}/")
+            utc_variants.append(int(user_utc))
+        else:
+            utc_variants.append(user_utc)
+
+    utc_variants.extend([
+        f"{root_host}/api/qa/unittestcollections/1/",
+        f"{root_host}/api/v1/qa/unittestcollections/1/",
+        None
+    ])
+
+    clean_utc_variants = []
+    for v in utc_variants:
+        if v not in clean_utc_variants:
+            clean_utc_variants.append(v)
 
     candidate_urls = []
     if base_url.endswith("/unittestcollections") or base_url.endswith("/test-list-instances") or base_url.endswith("/testlistinstances"):
         candidate_urls.append(base_url if base_url.endswith("/") else base_url + "/")
 
-    root_host = base_url.split("/api")[0].rstrip("/") if "/api" in base_url else base_url
-    api_prefix = ""
-    if "/api/v1" in base_url:
-        api_prefix = "/api/v1"
-    elif "/api" in base_url:
-        api_prefix = "/api"
+    api_prefix = "/api/v1" if "/api/v1" in base_url else ("/api" if "/api" in base_url else "")
 
     std_paths = []
     if api_prefix:
@@ -601,58 +649,72 @@ def push_qatrack_results_endpoint(req: PushQATrackRequest):
         if full not in candidate_urls:
             candidate_urls.append(full)
 
-    headers = {
-        "Content-Type": "application/json",
-        "Accept": "application/json"
-    }
-    if settings.get("qatrack_token"):
-        headers["Authorization"] = f"Token {settings['qatrack_token']}"
-
-    json_bytes = json.dumps(payload).encode("utf-8")
     last_err_msg = ""
     attempted_urls = []
+    last_payload = {}
 
     for url in candidate_urls:
-        attempted_urls.append(url)
-        try:
-            h_req = urllib.request.Request(url, data=json_bytes, headers=headers, method="POST")
-            with urllib.request.urlopen(h_req, timeout=10) as resp:
-                resp_str = resp.read().decode("utf-8")
-                try:
-                    resp_data = json.loads(resp_str)
-                except Exception:
-                    resp_data = {"raw_response": resp_str}
+        for utc_val in clean_utc_variants:
+            payload = {
+                "unit": unit_name,
+                "test_list": test_list_slug,
+                "work_started": start_str,
+                "work_completed": now_str,
+                "results": results_payload,
+                "tests": results_payload,
+                "comment": f"Auto-pushed from Anti-Gravity QC Engine (Linac: {summary.get('machine_type', 'HALCYON')})"
+            }
+            if utc_val is not None:
+                payload["unit_test_collection"] = utc_val
+
+            last_payload = payload
+            json_bytes = json.dumps(payload).encode("utf-8")
+            attempted_urls.append(f"{url} (utc={utc_val})")
+
+            try:
+                h_req = urllib.request.Request(url, data=json_bytes, headers=headers, method="POST")
+                with urllib.request.urlopen(h_req, timeout=10) as resp:
+                    resp_str = resp.read().decode("utf-8")
+                    try:
+                        resp_data = json.loads(resp_str)
+                    except Exception:
+                        resp_data = {"raw_response": resp_str}
+
+                    return {
+                        "status": "success",
+                        "message": f"Successfully pushed results to QATrack+ ({unit_name} / {test_list_slug})",
+                        "endpoint_used": url,
+                        "unit_test_collection_used": utc_val,
+                        "payload_sent": payload,
+                        "qatrack_response": resp_data
+                    }
+            except urllib.error.HTTPError as http_err:
+                err_body = http_err.read().decode("utf-8", errors="ignore")
+                last_err_msg = f"HTTP {http_err.code} ({http_err.reason}): {err_body[:300]}"
+                if http_err.code in (404, 405):
+                    logger.info(f"QATrack+ endpoint '{url}' returned {http_err.code}. Trying next endpoint...")
+                    break
+                if "unit_test_collection" in err_body:
+                    logger.info(f"QATrack+ utc variant '{utc_val}' rejected with unit_test_collection error. Trying next utc variant...")
+                    continue
 
                 return {
-                    "status": "success",
-                    "message": f"Successfully pushed results to QATrack+ ({settings.get('unit_name')} / {settings.get('test_list_slug')})",
+                    "status": "error",
+                    "message": f"QATrack+ Push Error ({last_err_msg})",
                     "endpoint_used": url,
+                    "unit_test_collection_used": utc_val,
                     "payload_sent": payload,
-                    "qatrack_response": resp_data
+                    "http_status": http_err.code,
+                    "details": err_body
                 }
-        except urllib.error.HTTPError as http_err:
-            err_body = http_err.read().decode("utf-8", errors="ignore")
-            last_err_msg = f"HTTP {http_err.code} ({http_err.reason}): {err_body[:300]}"
-            if http_err.code in (404, 405):
-                logger.info(f"QATrack+ candidate endpoint '{url}' returned {http_err.code}. Trying next candidate...")
-                continue
-
-            return {
-                "status": "error",
-                "message": f"QATrack+ Push Error ({last_err_msg})",
-                "endpoint_used": url,
-                "payload_sent": payload,
-                "http_status": http_err.code,
-                "details": err_body
-            }
-        except Exception as push_err:
-            last_err_msg = str(push_err)
+            except Exception as push_err:
+                last_err_msg = str(push_err)
 
     return {
         "status": "error",
         "message": f"QATrack+ Push Failed: None of the candidate endpoints succeeded on {base_url}. Error: {last_err_msg}",
         "attempted_urls": attempted_urls,
-        "payload_sent": payload
+        "payload_sent": last_payload
     }
 
 @app.get("/api/plan-info")
