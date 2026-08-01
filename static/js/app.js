@@ -250,62 +250,6 @@ document.addEventListener('DOMContentLoaded', () => {
         ]
     };
 
-    function pollWatchedFolder(autoRunAnalysis = false) {
-        const folderPath = inputWatchFolder ? inputWatchFolder.value.trim() : '';
-        if (!folderPath) return;
-
-        const mType = selectMachineType ? selectMachineType.value : 'HALCYON';
-
-        fetch('/api/watch-folder', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-                folder_path: folderPath,
-                machine_type: mType
-            })
-        })
-        .then(res => res.json())
-        .then(data => {
-            if (data.status === 'success') {
-                lastWatchedFolderData = data;
-                const currentMachine = data.machine_type || mType;
-                const expectedList = slotDefinitions[currentMachine] || slotDefinitions['HALCYON'];
-
-                if (lblChecklistTitle) {
-                    lblChecklistTitle.textContent = `📋 Live Expected DICOM Field Checklist (${data.mapped_count} / ${data.required_count} Detected)`;
-                }
-
-                // Gating: Enable 'Run Analysis' button ONLY when all required files are present
-                if (btnRunSagAnalysis) {
-                    if (data.is_complete) {
-                        btnRunSagAnalysis.disabled = false;
-                        btnRunSagAnalysis.style.background = 'linear-gradient(135deg, #10b981, #059669)';
-                        btnRunSagAnalysis.style.color = '#fff';
-                        btnRunSagAnalysis.style.cursor = 'pointer';
-                        btnRunSagAnalysis.title = 'Run Anti-Gravity QC Analysis';
-                    } else {
-                        btnRunSagAnalysis.disabled = true;
-                        btnRunSagAnalysis.style.background = '#334155';
-                        btnRunSagAnalysis.style.color = '#94a3b8';
-                        btnRunSagAnalysis.style.cursor = 'not-allowed';
-                        btnRunSagAnalysis.title = 'Awaiting all required DICOM files before analysis can run';
-                    }
-                }
-
-                if (lblWatchedCount) {
-                    if (data.is_complete) {
-                        lblWatchedCount.className = 'badge-pill PASS';
-                        lblWatchedCount.style.background = 'rgba(16,185,129,0.2)';
-                        lblWatchedCount.style.color = '#10b981';
-                        lblWatchedCount.textContent = `🟢 All ${data.required_count} Fields Detected`;
-                    } else {
-                        lblWatchedCount.className = 'badge-pill WARN';
-                        lblWatchedCount.style.background = 'rgba(245,158,11,0.2)';
-                        lblWatchedCount.style.color = '#f59e0b';
-                        lblWatchedCount.textContent = `🟡 ${data.mapped_count} of ${data.required_count} Mapped`;
-                    }
-                }
-
     let manualUploadedSlots = {};
 
     function pollWatchedFolder(autoRunAnalysis = false) {
