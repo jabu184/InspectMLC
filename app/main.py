@@ -351,6 +351,42 @@ def watch_folder_endpoint(req: WatchFolderRequest):
             })
 
     mapped_count = sum(1 for s in expected_slots if s in mapped_slots)
+
+    # Smart Pairing Post-Processor for TrueBeam / Halcyon datasets:
+    # If open_<angle> is missing but there are multiple files detected for that gantry angle:
+    for ang in [0, 90, 180, 270]:
+        open_slot = f"open_{ang}"
+        dist_slot = f"dist_{ang}"
+        
+        ang_files = [f for f in detected_files if int(round(float(f.get("gantry_angle", -1)))) % 360 == ang]
+        if open_slot not in mapped_slots and len(ang_files) >= 2:
+            try:
+                def get_max_pixel(f_info):
+                    try:
+                        import pydicom
+                        ds = pydicom.dcmread(f_info["saved_path"], stop_before_pixels=False)
+                        return float(ds.pixel_array.max())
+                    except Exception:
+                        return 0.0
+
+                ang_files_sorted = sorted(ang_files, key=get_max_pixel)
+                open_candidate = ang_files_sorted[0]
+                dist_candidate = ang_files_sorted[-1]
+
+                open_candidate["target_slot"] = open_slot
+                open_candidate["beam_type"] = "OPEN"
+                dist_candidate["target_slot"] = dist_slot
+                dist_candidate["beam_type"] = "TRUEBEAM_MLC" if req_machine == "TRUEBEAM" else "HALCYON_DISTAL"
+
+                mapped_slots[open_slot] = open_candidate
+                mapped_slots[dist_slot] = dist_candidate
+
+                assigned_paths = {open_candidate["saved_path"], dist_candidate["saved_path"]}
+                unmapped_files = [uf for uf in unmapped_files if uf.get("saved_path") not in assigned_paths]
+            except Exception as pair_err:
+                logger.warning(f"Smart pairing warning for angle {ang}: {pair_err}")
+
+    mapped_count = sum(1 for s in expected_slots if s in mapped_slots)
     is_complete = (mapped_count >= len(expected_slots))
 
     return {
@@ -1194,7 +1230,11 @@ def generate_demo_series_endpoint(
         )
         fname = f"halcyon_gantry_{int(angle)}deg.dcm"
         fpath = os.path.join(sample_dir, fname)
-        save_synthetic_dicom_rtimage(arr, fpath, gantry_angle=angle, label=f"HAL_GANTRY_{int(angle)}")
+        try:
+            save_synthetic_dicom_rtimage(arr, fpath, gantry_angle=angle, label=f"HAL_GANTRY_{int(angle)}")
+        except Exception:
+            fpath = os.path.join(temp_upload_dir, fname)
+            save_synthetic_dicom_rtimage(arr, fpath, gantry_angle=angle, label=f"HAL_GANTRY_{int(angle)}")
         generated_files.append({"gantry_angle": angle, "path": normalize_path(fpath), "filename": fname})
 
     return {

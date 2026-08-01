@@ -306,37 +306,166 @@ document.addEventListener('DOMContentLoaded', () => {
                     }
                 }
 
-                // Render Live Expected Field Checklist Grid Cards
+    let manualUploadedSlots = {};
+
+    function pollWatchedFolder(autoRunAnalysis = false) {
+        const folderPath = inputWatchFolder ? inputWatchFolder.value.trim() : '';
+        const machineType = selectMachineType ? selectMachineType.value : 'HALCYON';
+
+        if (!folderPath) {
+            if (lblWatchedCount) lblWatchedCount.textContent = '⚪ No Folder Selected';
+            return;
+        }
+
+        fetch('/api/watch-folder', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                folder_path: folderPath,
+                machine_type: machineType
+            })
+        })
+        .then(res => res.json())
+        .then(data => {
+            if (data.status === 'success') {
+                lastWatchedFolderData = data;
+
+                const expectedList = expectedFields[machineType] || expectedFields['HALCYON'];
+                let mappedCount = 0;
+
+                expectedList.forEach(slotDef => {
+                    if (manualUploadedSlots[slotDef.key] || (data.mapped_slots && data.mapped_slots[slotDef.key])) {
+                        mappedCount++;
+                    }
+                });
+
+                const isAllComplete = (mappedCount >= expectedList.length);
+
+                if (lblWatchedCount) {
+                    if (isAllComplete) {
+                        lblWatchedCount.className = 'badge-pill PASS';
+                        lblWatchedCount.style.background = 'rgba(16,185,129,0.2)';
+                        lblWatchedCount.style.color = '#10b981';
+                        lblWatchedCount.textContent = `🟢 All ${expectedList.length} Fields Ready`;
+                    } else {
+                        lblWatchedCount.className = 'badge-pill WARN';
+                        lblWatchedCount.style.background = 'rgba(245,158,11,0.2)';
+                        lblWatchedCount.style.color = '#f59e0b';
+                        lblWatchedCount.textContent = `🟡 ${mappedCount} of ${expectedList.length} Mapped`;
+                    }
+                }
+
+                if (btnRunSagAnalysis) {
+                    btnRunSagAnalysis.disabled = !isAllComplete;
+                    if (isAllComplete) {
+                        btnRunSagAnalysis.style.opacity = '1';
+                        btnRunSagAnalysis.style.cursor = 'pointer';
+                    } else {
+                        btnRunSagAnalysis.style.opacity = '0.5';
+                        btnRunSagAnalysis.style.cursor = 'not-allowed';
+                    }
+                }
+
+                // Render Live Expected Field Checklist Grid Cards with Manual Upload option per slot
                 if (expectedFieldsGrid) {
                     expectedFieldsGrid.innerHTML = '';
                     expectedList.forEach(slotDef => {
-                        const fileMatch = data.mapped_slots ? data.mapped_slots[slotDef.key] : null;
+                        const manualMatch = manualUploadedSlots[slotDef.key];
+                        const folderMatch = data.mapped_slots ? data.mapped_slots[slotDef.key] : null;
+                        const fileMatch = manualMatch || folderMatch;
+                        const isManual = !!manualMatch;
+
                         const card = document.createElement('div');
 
                         if (fileMatch) {
-                            card.style.cssText = 'background: rgba(16, 185, 129, 0.12); border: 1px solid #10b981; padding: 0.45rem 0.65rem; border-radius: 6px; font-size: 0.76rem; color: #f8fafc;';
+                            const displayFileName = fileMatch.filename || (typeof fileMatch === 'string' ? fileMatch.split('/').pop().split('\\').pop() : 'DICOM Image');
+                            card.style.cssText = isManual
+                                ? 'background: rgba(168, 85, 247, 0.15); border: 1px solid #a855f7; padding: 0.45rem 0.65rem; border-radius: 6px; font-size: 0.76rem; color: #f8fafc;'
+                                : 'background: rgba(16, 185, 129, 0.12); border: 1px solid #10b981; padding: 0.45rem 0.65rem; border-radius: 6px; font-size: 0.76rem; color: #f8fafc;';
                             card.innerHTML = `
-                                <div style="font-weight: 700; color: #10b981; display: flex; align-items: center; justify-content: space-between;">
-                                    <span>✅ ${slotDef.title}</span>
-                                    <span style="font-size: 0.7rem; color: #34d399;">READY</span>
+                                <div style="display: flex; align-items: center; justify-content: space-between; gap: 0.3rem;">
+                                    <span style="font-weight: 700; color: ${isManual ? '#c084fc' : '#10b981'};">
+                                        ${isManual ? '📌' : '✅'} ${slotDef.title}
+                                    </span>
+                                    <div style="display: flex; align-items: center; gap: 0.25rem;">
+                                        ${isManual ? `<span style="font-size: 0.62rem; background: rgba(168,85,247,0.3); color: #c084fc; font-weight: 700; padding: 0.08rem 0.3rem; border-radius: 3px;">MANUAL UPLOAD</span>` : `<span style="font-size: 0.62rem; color: #34d399; font-weight: 700;">FOLDER</span>`}
+                                        <button type="button" class="btn-slot-upload" data-slot="${slotDef.key}" style="background: rgba(0, 242, 254, 0.15); border: 1px solid #00f2fe; color: #00f2fe; font-size: 0.65rem; padding: 0.1rem 0.35rem; border-radius: 3px; cursor: pointer;" title="Upload custom DICOM file for ${slotDef.title}">
+                                            📤 Upload
+                                        </button>
+                                        ${isManual ? `<button type="button" class="btn-slot-clear" data-slot="${slotDef.key}" style="background: rgba(239, 68, 68, 0.2); border: 1px solid #ef4444; color: #fca5a5; font-size: 0.65rem; padding: 0.1rem 0.35rem; border-radius: 3px; cursor: pointer;" title="Clear manual upload override">✕</button>` : ''}
+                                    </div>
                                 </div>
-                                <div style="font-size: 0.71rem; color: #94a3b8; margin-top: 0.15rem; text-overflow: ellipsis; overflow: hidden; white-space: nowrap;">
-                                    📄 ${fileMatch.filename || (typeof fileMatch === 'string' ? fileMatch.split('/').pop().split('\\').pop() : 'DICOM Image')}
+                                <div style="font-size: 0.71rem; color: ${isManual ? '#e9d5ff' : '#94a3b8'}; margin-top: 0.2rem; text-overflow: ellipsis; overflow: hidden; white-space: nowrap;">
+                                    📄 ${displayFileName}
                                 </div>
+                                <input type="file" id="file-input-slot-${slotDef.key}" accept=".dcm,.dicom,image/*" style="display: none;">
                             `;
                         } else {
                             card.style.cssText = 'background: #0f172a; border: 1px dashed #334155; padding: 0.45rem 0.65rem; border-radius: 6px; font-size: 0.76rem; color: #64748b;';
                             card.innerHTML = `
-                                <div style="font-weight: 600; color: #94a3b8; display: flex; align-items: center; justify-content: space-between;">
-                                    <span>⏳ ${slotDef.title}</span>
-                                    <span style="font-size: 0.68rem; color: #f59e0b;">AWAITING</span>
+                                <div style="display: flex; align-items: center; justify-content: space-between; gap: 0.3rem;">
+                                    <span style="font-weight: 600; color: #94a3b8;">⏳ ${slotDef.title}</span>
+                                    <div style="display: flex; align-items: center; gap: 0.25rem;">
+                                        <span style="font-size: 0.65rem; color: #f59e0b;">AWAITING</span>
+                                        <button type="button" class="btn-slot-upload" data-slot="${slotDef.key}" style="background: rgba(0, 242, 254, 0.15); border: 1px solid #00f2fe; color: #00f2fe; font-size: 0.65rem; padding: 0.1rem 0.35rem; border-radius: 3px; cursor: pointer;" title="Upload custom DICOM file for ${slotDef.title}">
+                                            📤 Upload
+                                        </button>
+                                    </div>
                                 </div>
-                                <div style="font-size: 0.71rem; color: #475569; margin-top: 0.15rem;">
+                                <div style="font-size: 0.71rem; color: #475569; margin-top: 0.2rem;">
                                     Waiting for DICOM image...
                                 </div>
+                                <input type="file" id="file-input-slot-${slotDef.key}" accept=".dcm,.dicom,image/*" style="display: none;">
                             `;
                         }
+
                         expectedFieldsGrid.appendChild(card);
+
+                        const uploadBtn = card.querySelector(`.btn-slot-upload[data-slot="${slotDef.key}"]`);
+                        const fileInput = card.querySelector(`#file-input-slot-${slotDef.key}`);
+                        const clearBtn = card.querySelector(`.btn-slot-clear[data-slot="${slotDef.key}"]`);
+
+                        if (uploadBtn && fileInput) {
+                            uploadBtn.addEventListener('click', (e) => {
+                                e.stopPropagation();
+                                fileInput.click();
+                            });
+
+                            fileInput.addEventListener('change', (e) => {
+                                if (!e.target.files || e.target.files.length === 0) return;
+                                const file = e.target.files[0];
+                                const formData = new FormData();
+                                formData.append('file', file);
+                                formData.append('target_slot', slotDef.key);
+
+                                fetch('/api/upload-field-image', {
+                                    method: 'POST',
+                                    body: formData
+                                })
+                                .then(res => res.json())
+                                .then(uploadData => {
+                                    if (uploadData.status === 'success' || uploadData.saved_path) {
+                                        manualUploadedSlots[slotDef.key] = {
+                                            filename: uploadData.original_filename || file.name,
+                                            saved_path: uploadData.saved_path,
+                                            is_manual: true
+                                        };
+                                        pollWatchedFolder(false);
+                                    } else {
+                                        alert("Upload failed: " + (uploadData.detail || "Error"));
+                                    }
+                                })
+                                .catch(err => alert("Upload error: " + err));
+                            });
+                        }
+
+                        if (clearBtn) {
+                            clearBtn.addEventListener('click', (e) => {
+                                e.stopPropagation();
+                                delete manualUploadedSlots[slotDef.key];
+                                pollWatchedFolder(false);
+                            });
+                        }
                     });
                 }
 
@@ -359,7 +488,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
                 updateViewerImage();
 
-                if (autoRunAnalysis && data.is_complete) {
+                if (autoRunAnalysis && isAllComplete) {
                     runAntiGravityAnalysis();
                 }
 
@@ -683,9 +812,12 @@ document.addEventListener('DOMContentLoaded', () => {
         }
 
         const angles = [0, 90, 180, 270];
-        const slots = lastWatchedFolderData.mapped_slots;
+        const slots = (lastWatchedFolderData && lastWatchedFolderData.mapped_slots) ? lastWatchedFolderData.mapped_slots : {};
 
         const getSlotPath = (key) => {
+            if (manualUploadedSlots[key]) {
+                return manualUploadedSlots[key].saved_path;
+            }
             const match = slots[key];
             if (!match) return '';
             return typeof match === 'string' ? match : (match.saved_path || '');
@@ -739,6 +871,23 @@ document.addEventListener('DOMContentLoaded', () => {
                 currentSagAnalysisData = data;
                 updateAntiGravityKPIs(data.summary);
 
+                // User directive: Default view once analysed should be 90° image, all tracks, and all available leaf banks/pairs
+                activeGantryAngleIndex = 1; // 90° index in [0, 90, 180, 270]
+                selectedTrackIndex = null;  // All tracks
+                activeBankFilter = 'ALL';   // All available leaf banks/pairs
+
+                // Update UI active states for Gantry Angle buttons
+                const btnGantryAngles = document.querySelectorAll('#gantry-angle-tabs .tab-btn');
+                btnGantryAngles.forEach((btn, idx) => {
+                    if (idx === 1) btn.classList.add('active');
+                    else btn.classList.remove('active');
+                });
+
+                // Update UI active states for Bank Filter buttons
+                if (btnBankDistal) btnBankDistal.classList.remove('active');
+                if (btnBankProximal) btnBankProximal.classList.remove('active');
+                if (btnBankAll) btnBankAll.classList.add('active');
+
                 const filteredMetrics = filterByActiveBank(data.combined_metrics);
                 renderAntiGravityTable(filteredMetrics);
 
@@ -782,15 +931,19 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     function updateViewerImage() {
-        if (!lastWatchedFolderData || !lastWatchedFolderData.mapped_slots) return;
-
         const angles = [0, 90, 180, 270];
         const gAng = angles[activeGantryAngleIndex] !== undefined ? angles[activeGantryAngleIndex] : 0;
-        const slots = lastWatchedFolderData.mapped_slots;
+        const slots = (lastWatchedFolderData && lastWatchedFolderData.mapped_slots) ? lastWatchedFolderData.mapped_slots : {};
 
         const slotKey = (activeImageType === 'OPEN') ? `open_${gAng}` : `dist_${gAng}`;
-        const match = slots[slotKey];
-        const selectedPath = match ? (typeof match === 'string' ? match : match.saved_path) : '';
+        let selectedPath = '';
+
+        if (manualUploadedSlots[slotKey]) {
+            selectedPath = manualUploadedSlots[slotKey].saved_path;
+        } else if (slots[slotKey]) {
+            const match = slots[slotKey];
+            selectedPath = typeof match === 'string' ? match : (match.saved_path || '');
+        }
 
         if (selectedPath) {
             const formData = new FormData();
