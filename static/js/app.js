@@ -274,7 +274,7 @@ document.addEventListener('DOMContentLoaded', () => {
             if (data.status === 'success') {
                 lastWatchedFolderData = data;
 
-                const expectedList = expectedFields[machineType] || expectedFields['HALCYON'];
+                const expectedList = slotDefinitions[machineType] || slotDefinitions['HALCYON'];
                 let mappedCount = 0;
 
                 expectedList.forEach(slotDef => {
