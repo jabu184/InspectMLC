@@ -22,3 +22,8 @@ dist/
 Thumbs.db
 .vscode/
 .idea/
+
+# Large test images
+Test Images/
+*.zip
+

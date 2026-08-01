@@ -4,6 +4,28 @@ import numpy as np
 from typing import List, Dict, Any, Optional
 from app.mlc_analyzer import analyze_halcyon_triad, analyze_truebeam_pair
 
+def fit_robust_epid_tilt(y_coords, x_coords):
+    """
+    Fits EPID detector panel rotation/tilt slope using robust median-of-slopes (Theil-Sen / RANSAC)
+    so that single or multiple faulty offset leaves do NOT distort baseline panel tilt estimation.
+    """
+    y_v = np.asarray(y_coords, dtype=np.float64)
+    x_v = np.asarray(x_coords, dtype=np.float64)
+    valid = ~np.isnan(x_v) & (x_v != 0.0)
+    y_v, x_v = y_v[valid], x_v[valid]
+    if len(x_v) < 4:
+        return 0.0, float(np.median(x_v)) if len(x_v) > 0 else 0.0
+    slopes = []
+    n = len(y_v)
+    for i in range(n):
+        for j in range(i + 1, n):
+            dy = y_v[j] - y_v[i]
+            if abs(dy) > 20.0:
+                slopes.append((x_v[j] - x_v[i]) / dy)
+    slope = float(np.median(slopes)) if slopes else 0.0
+    intercept = float(np.median(x_v - slope * y_v))
+    return slope, intercept
+
 def run_anti_gravity_qc_pipeline(
     cardinal_datasets: List[Dict[str, Any]],
     machine_type: str = "HALCYON",
@@ -81,6 +103,53 @@ def run_anti_gravity_qc_pipeline(
 
     ref_tracks = {t["track_index"]: t for t in angle_0["tracks"]}
 
+    # Fit Robust Bank-Specific EPID Detector Rotation/Tilt Slope at Gantry 0°
+    dist_y_0 = [t.get("y_center_mm", 0.0) for t in angle_0["tracks"] if "Distal" in t["bank"] and t["x_true_mm"] is not None]
+    dist_x_0 = [t["x_true_mm"] for t in angle_0["tracks"] if "Distal" in t["bank"] and t["x_true_mm"] is not None]
+    prox_y_0 = [t.get("y_center_mm", 0.0) for t in angle_0["tracks"] if "Proximal" in t["bank"] and t["x_true_mm"] is not None]
+    prox_x_0 = [t["x_true_mm"] for t in angle_0["tracks"] if "Proximal" in t["bank"] and t["x_true_mm"] is not None]
+
+    slope_dist_0, intercept_dist_0 = fit_robust_epid_tilt(dist_y_0, dist_x_0)
+    slope_prox_0, intercept_prox_0 = fit_robust_epid_tilt(prox_y_0, prox_x_0)
+
+    # Compute median bank sag shifts at 90° and 270° to isolate individual leaf sags from global panel sag
+    dist_sag90_raw, prox_sag90_raw = [], []
+    dist_sag270_raw, prox_sag270_raw = [], []
+
+    p_off_0 = angle_0["panel_offset"]
+    p_off_90 = angle_90["panel_offset"] if angle_90 else None
+    p_off_180 = angle_180["panel_offset"] if angle_180 else None
+    p_off_270 = angle_270["panel_offset"] if angle_270 else None
+
+    if angle_90 and p_off_90:
+        for t0 in angle_0["tracks"]:
+            t90 = next((t for t in angle_90["tracks"] if t["track_index"] == t0["track_index"]), None)
+            if t90 and t0.get("x_left_mm") is not None and t90.get("x_left_mm") is not None:
+                x_left_0 = (t0["x_left_mm"] - p_off_0["delta_x_panel_mm"]) * p_off_0["k_mag"]
+                x_left_90 = (t90["x_left_mm"] - p_off_90["delta_x_panel_mm"]) * p_off_90["k_mag"]
+                raw_s90 = x_left_90 - x_left_0
+                if "Distal" in t0["bank"]:
+                    dist_sag90_raw.append(raw_s90)
+                else:
+                    prox_sag90_raw.append(raw_s90)
+
+    if angle_270 and p_off_270:
+        for t0 in angle_0["tracks"]:
+            t270 = next((t for t in angle_270["tracks"] if t["track_index"] == t0["track_index"]), None)
+            if t270 and t0.get("x_left_mm") is not None and t270.get("x_left_mm") is not None:
+                x_left_0 = (t0["x_left_mm"] - p_off_0["delta_x_panel_mm"]) * p_off_0["k_mag"]
+                x_left_270 = (t270["x_left_mm"] - p_off_270["delta_x_panel_mm"]) * p_off_270["k_mag"]
+                raw_s270 = x_left_270 - x_left_0
+                if "Distal" in t0["bank"]:
+                    dist_sag270_raw.append(raw_s270)
+                else:
+                    prox_sag270_raw.append(raw_s270)
+
+    med_dist_s90 = float(np.median(dist_sag90_raw)) if dist_sag90_raw else 0.0
+    med_prox_s90 = float(np.median(prox_sag90_raw)) if prox_sag90_raw else 0.0
+    med_dist_s270 = float(np.median(dist_sag270_raw)) if dist_sag270_raw else 0.0
+    med_prox_s270 = float(np.median(prox_sag270_raw)) if prox_sag270_raw else 0.0
+
     nominal_gap_mm = 5.0
     dlg_prox_list, dlg_dist_list = [], []
     for t in angle_0["tracks"]:
@@ -106,16 +175,18 @@ def run_anti_gravity_qc_pipeline(
     leaf_uncertainties = []
     fluence_deltas = []
 
-    p_off_0 = angle_0["panel_offset"]
-    p_off_90 = angle_90["panel_offset"] if angle_90 else None
-    p_off_180 = angle_180["panel_offset"] if angle_180 else None
-    p_off_270 = angle_270["panel_offset"] if angle_270 else None
-
     for tr in angle_0["tracks"]:
         idx = tr["track_index"]
         bank = tr["bank"]
         pair_num = tr["pair_number"]
         label = tr["label"]
+        y_center_mm = tr.get("y_center_mm", 0.0)
+        is_distal = "Distal" in bank
+
+        slope_0 = slope_dist_0 if is_distal else slope_prox_0
+        intercept_0 = intercept_dist_0 if is_distal else intercept_prox_0
+        med_s90 = med_dist_s90 if is_distal else med_prox_s90
+        med_s270 = med_dist_s270 if is_distal else med_prox_s270
 
         ref_t = ref_tracks.get(idx)
         ref_x = ref_t["x_true_mm"] if ref_t else None
@@ -126,6 +197,10 @@ def run_anti_gravity_qc_pipeline(
         # Calculate True Left & Right positions @ 0°
         x_left_true_0 = ((ref_left_mm - p_off_0["delta_x_panel_mm"]) * p_off_0["k_mag"]) if (ref_left_mm is not None) else None
         x_right_true_0 = ((ref_right_mm - p_off_0["delta_x_panel_mm"]) * p_off_0["k_mag"]) if (ref_right_mm is not None) else None
+
+        # Calculate 0° Leaf Position Calibration Offset Error relative to Bank Detector Baseline
+        expected_x0 = intercept_0 + slope_0 * y_center_mm
+        calib_offset_mm = (ref_x - expected_x0) if (ref_x is not None) else 0.0
 
         ref_auc = ref_t["auc_fluence"] if ref_t else 0.0
         ref_w = ref_t.get("aperture_width_mm") if ref_t else None
@@ -151,16 +226,16 @@ def run_anti_gravity_qc_pipeline(
                 
                 if t90_left is not None and x_left_true_0 is not None:
                     x_left_true_90 = (t90_left - p_off_90["delta_x_panel_mm"]) * p_off_90["k_mag"]
-                    sag_left_90 = x_left_true_90 - x_left_true_0
+                    sag_left_90 = (x_left_true_90 - x_left_true_0) - med_s90
                     all_left_true.append(x_left_true_90)
                 
                 if t90_right is not None and x_right_true_0 is not None:
                     x_right_true_90 = (t90_right - p_off_90["delta_x_panel_mm"]) * p_off_90["k_mag"]
-                    sag_right_90 = x_right_true_90 - x_right_true_0
+                    sag_right_90 = (x_right_true_90 - x_right_true_0) - med_s90
                     all_right_true.append(x_right_true_90)
 
                 if ref_x is not None and t90["x_true_mm"] is not None:
-                    sag_90 = t90["x_true_mm"] - ref_x
+                    sag_90 = (t90["x_true_mm"] - ref_x) - med_s90
                 if ref_auc > 0 and t90["auc_fluence"] > 0:
                     delta_d_90 = (t90["auc_fluence"] / ref_auc - 1.0) * 100.0
 
@@ -185,16 +260,16 @@ def run_anti_gravity_qc_pipeline(
 
                 if t270_left is not None and x_left_true_0 is not None:
                     x_left_true_270 = (t270_left - p_off_270["delta_x_panel_mm"]) * p_off_270["k_mag"]
-                    sag_left_270 = x_left_true_270 - x_left_true_0
+                    sag_left_270 = (x_left_true_270 - x_left_true_0) - med_s270
                     all_left_true.append(x_left_true_270)
 
                 if t270_right is not None and x_right_true_0 is not None:
                     x_right_true_270 = (t270_right - p_off_270["delta_x_panel_mm"]) * p_off_270["k_mag"]
-                    sag_right_270 = x_right_true_270 - x_right_true_0
+                    sag_right_270 = (x_right_true_270 - x_right_true_0) - med_s270
                     all_right_true.append(x_right_true_270)
 
                 if ref_x is not None and t270["x_true_mm"] is not None:
-                    sag_270 = t270["x_true_mm"] - ref_x
+                    sag_270 = (t270["x_true_mm"] - ref_x) - med_s270
                 if ref_auc > 0 and t270["auc_fluence"] > 0:
                     delta_d_270 = (t270["auc_fluence"] / ref_auc - 1.0) * 100.0
 
@@ -216,11 +291,14 @@ def run_anti_gravity_qc_pipeline(
         max_d_pct = max(all_deltas) if all_deltas else 0.0
         fluence_deltas.append(max_d_pct)
 
+        # Combined Positional Deviation (Max of Gravitational Sag and Positional Calibration Offset Error)
+        max_leaf_deviation = max(max_leaf_sag, abs(calib_offset_mm))
+
         status = "PASS"
-        if max_leaf_sag >= action_sag_mm or max_d_pct > (2.0 * warn_fluence_pct):
+        if max_leaf_deviation >= action_sag_mm or max_d_pct > (2.0 * warn_fluence_pct):
             status = "FAIL"
             fail_count += 1
-        elif max_leaf_sag >= warn_sag_mm or max_d_pct > warn_fluence_pct:
+        elif max_leaf_deviation >= warn_sag_mm or max_d_pct > warn_fluence_pct:
             status = "WARN"
             warn_count += 1
         else:
@@ -239,6 +317,7 @@ def run_anti_gravity_qc_pipeline(
             "neutral_0_x_left_mm": round(ref_left_mm, 3) if ref_left_mm is not None else None,
             "neutral_0_x_right_mm": round(ref_right_mm, 3) if ref_right_mm is not None else None,
             "neutral_0_x_raw_mm": round(ref_raw_mm, 3) if ref_raw_mm is not None else None,
+            "leaf_calibration_offset_mm": round(calib_offset_mm, 3),
             "neutral_0_auc": round(ref_auc, 3),
             "baseline_0_dlg_mm": round(ref_dlg, 3),
             "raw_left_shift_90_mm": round(raw_left_shift_90, 3) if raw_left_shift_90 is not None else None,
@@ -255,6 +334,7 @@ def run_anti_gravity_qc_pipeline(
             "delta_d_270_pct": round(delta_d_270, 2) if delta_d_270 is not None else None,
             "max_sag_mm": round(max_s, 3),
             "max_leaf_sag_mm": round(max_leaf_sag, 3),
+            "max_leaf_deviation_mm": round(max_leaf_deviation, 3),
             "leaf_positional_uncertainty_mm": round(leaf_uncertainty, 3),
             "max_fluence_delta_pct": round(max_d_pct, 2),
             "status": status
