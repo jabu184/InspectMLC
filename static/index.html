@@ -724,6 +724,41 @@
         </div>
     </div>
 
+    <!-- DICOM Header Inspection Splash Modal -->
+    <div id="dicom-header-modal" class="modal" style="display: none; position: fixed; z-index: 9999; left: 0; top: 0; width: 100%; height: 100%; background: rgba(5, 8, 17, 0.85); backdrop-filter: blur(8px);">
+        <div class="modal-content" style="background: #0f172a; border: 1px solid #3b82f6; width: 92%; max-width: 850px; margin: 3% auto; border-radius: 12px; padding: 1.5rem; color: #f8fafc; box-shadow: 0 20px 50px rgba(0,0,0,0.7); position: relative; max-height: 88vh; display: flex; flex-direction: column;">
+            <span id="btn-close-dicom-modal" style="position: absolute; right: 1.2rem; top: 1rem; font-size: 1.5rem; cursor: pointer; color: #64748b; transition: color 0.2s;">&times;</span>
+            
+            <div style="display: flex; align-items: center; justify-content: space-between; gap: 1rem; margin-bottom: 1rem; border-bottom: 1px solid #1e293b; padding-bottom: 0.8rem;">
+                <div style="display: flex; align-items: center; gap: 0.75rem;">
+                    <div style="width: 42px; height: 42px; background: linear-gradient(135deg, #3b82f6, #60a5fa); border-radius: 10px; display: flex; align-items: center; justify-content: center; font-size: 1.4rem; color: #0f172a; box-shadow: 0 0 15px rgba(59,130,246,0.4);">
+                        🔍
+                    </div>
+                    <div>
+                        <div id="dicom-modal-title" style="font-size: 1.2rem; font-weight: 800; color: #f8fafc;">
+                            DICOM Header Inspection
+                        </div>
+                        <div id="dicom-modal-subtitle" style="font-size: 0.78rem; color: #94a3b8; text-overflow: ellipsis; overflow: hidden; white-space: nowrap; max-width: 550px;">
+                            Inspecting DICOM Tags
+                        </div>
+                    </div>
+                </div>
+                <input type="text" id="dicom-modal-search" placeholder="🔎 Filter tags..." style="background: #1e293b; border: 1px solid #334155; color: #f8fafc; border-radius: 6px; padding: 0.35rem 0.75rem; font-size: 0.78rem; width: 180px;">
+            </div>
+
+            <div id="dicom-modal-body" style="overflow-y: auto; flex: 1; padding-right: 0.5rem;">
+                <div style="text-align: center; color: #64748b; padding: 2rem;">Loading DICOM Header...</div>
+            </div>
+
+            <div style="margin-top: 1rem; display: flex; justify-content: space-between; align-items: center; border-top: 1px solid #1e293b; padding-top: 0.8rem;">
+                <div style="font-size: 0.75rem; color: #64748b;" id="dicom-modal-footer-info">
+                    Extracted via Pydicom Parser Engine
+                </div>
+                <button type="button" id="btn-close-dicom-modal-bottom" class="btn" style="background: linear-gradient(135deg, #3b82f6, #2563eb); color: #ffffff; font-weight: 700; border: none; padding: 0.35rem 1.2rem; cursor: pointer; border-radius: 6px;">Close</button>
+            </div>
+        </div>
+    </div>
+
     <!-- Scripts with Cache Busting -->
     <script src="/static/js/viewer.js?v=6.0"></script>
     <script src="/static/js/mlc_charts.js?v=6.0"></script>

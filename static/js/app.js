@@ -252,8 +252,136 @@ document.addEventListener('DOMContentLoaded', () => {
 
     let manualUploadedSlots = {};
 
+    // DICOM Header Inspection Modal Elements
+    const dicomHeaderModal = document.getElementById('dicom-header-modal');
+    const dicomModalTitle = document.getElementById('dicom-modal-title');
+    const dicomModalSubtitle = document.getElementById('dicom-modal-subtitle');
+    const dicomModalBody = document.getElementById('dicom-modal-body');
+    const dicomModalSearch = document.getElementById('dicom-modal-search');
+    const btnCloseDicomModal = document.getElementById('btn-close-dicom-modal');
+    const btnCloseDicomModalBottom = document.getElementById('btn-close-dicom-modal-bottom');
+
+    let currentInspectRawTags = [];
+
+    function inspectDicomHeader(filePath, slotTitle) {
+        if (!filePath) {
+            alert("No DICOM file associated with this slot.");
+            return;
+        }
+        if (!dicomHeaderModal || !dicomModalBody) return;
+
+        if (dicomModalTitle) dicomModalTitle.textContent = `🔍 DICOM Header - ${slotTitle || 'Image'}`;
+        if (dicomModalSubtitle) dicomModalSubtitle.textContent = `File: ${filePath}`;
+        dicomModalBody.innerHTML = `<div style="text-align: center; color: #38bdf8; padding: 2rem;"><span class="spinner-border spinner-border-sm"></span> Reading DICOM header tags...</div>`;
+        if (dicomModalSearch) dicomModalSearch.value = '';
+
+        dicomHeaderModal.style.display = 'block';
+
+        fetch('/api/inspect-dicom-header', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ file_path: filePath })
+        })
+        .then(res => res.json())
+        .then(data => {
+            if (data.status === 'success') {
+                currentInspectRawTags = data.raw_tags || [];
+                renderDicomHeaderModalContent(data.header, data.raw_tags);
+            } else {
+                dicomModalBody.innerHTML = `<div style="color: #ef4444; padding: 1rem;">⚠️ Error reading DICOM header: ${data.detail || 'Failed to parse file'}</div>`;
+            }
+        })
+        .catch(err => {
+            dicomModalBody.innerHTML = `<div style="color: #ef4444; padding: 1rem;">⚠️ Error inspecting DICOM file: ${err}</div>`;
+        });
+    }
+
+    function renderDicomHeaderModalContent(headerDict, rawTags, filterQuery = '') {
+        if (!dicomModalBody) return;
+
+        let html = ``;
+
+        // 1. Primary Metadata Key Cards
+        if (headerDict && !filterQuery) {
+            html += `<div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(230px, 1fr)); gap: 0.5rem; margin-bottom: 1rem;">`;
+            for (let [k, v] of Object.entries(headerDict)) {
+                if (k === 'Full Path') continue;
+                html += `
+                    <div style="background: #1e293b; border: 1px solid #334155; border-radius: 6px; padding: 0.45rem 0.65rem;">
+                        <div style="font-size: 0.68rem; color: #94a3b8; font-weight: 700; text-transform: uppercase;">${k}</div>
+                        <div style="font-size: 0.82rem; color: #f8fafc; font-weight: 600; text-overflow: ellipsis; overflow: hidden; white-space: nowrap;" title="${v}">${v}</div>
+                    </div>
+                `;
+            }
+            html += `</div>`;
+        }
+
+        // 2. Parsed Tags Table
+        const query = (filterQuery || '').toLowerCase();
+        const filteredTags = (rawTags || []).filter(t => {
+            if (!query) return true;
+            return (t.tag && t.tag.toLowerCase().includes(query)) ||
+                   (t.name && t.name.toLowerCase().includes(query)) ||
+                   (t.value && t.value.toLowerCase().includes(query));
+        });
+
+        html += `
+            <div style="font-weight: 700; font-size: 0.82rem; color: #38bdf8; margin-bottom: 0.4rem; display: flex; align-items: center; justify-content: space-between;">
+                <span>Detailed DICOM Elements & Header Tags (${filteredTags.length})</span>
+            </div>
+            <table style="width: 100%; border-collapse: collapse; font-size: 0.76rem;">
+                <thead>
+                    <tr style="background: #1e293b; color: #94a3b8; text-align: left;">
+                        <th style="padding: 0.4rem; border-bottom: 1px solid #334155; width: 90px;">Tag</th>
+                        <th style="padding: 0.4rem; border-bottom: 1px solid #334155;">Tag Name</th>
+                        <th style="padding: 0.4rem; border-bottom: 1px solid #334155; width: 45px;">VR</th>
+                        <th style="padding: 0.4rem; border-bottom: 1px solid #334155;">Value</th>
+                    </tr>
+                </thead>
+                <tbody>
+        `;
+
+        if (filteredTags.length === 0) {
+            html += `<tr><td colspan="4" style="padding: 1rem; text-align: center; color: #64748b;">No matching DICOM tags found.</td></tr>`;
+        } else {
+            filteredTags.forEach(t => {
+                html += `
+                    <tr style="border-bottom: 1px solid #1e293b;">
+                        <td style="padding: 0.35rem; font-family: monospace; color: #38bdf8;">${t.tag}</td>
+                        <td style="padding: 0.35rem; color: #e2e8f0; font-weight: 600;">${t.name}</td>
+                        <td style="padding: 0.35rem; color: #94a3b8; font-family: monospace;">${t.vr}</td>
+                        <td style="padding: 0.35rem; color: #cbd5e1; font-family: monospace; word-break: break-all;" title="${t.value}">${t.value}</td>
+                    </tr>
+                `;
+            });
+        }
+
+        html += `</tbody></table>`;
+        dicomModalBody.innerHTML = html;
+    }
+
+    if (dicomModalSearch) {
+        dicomModalSearch.addEventListener('input', (e) => {
+            renderDicomHeaderModalContent(null, currentInspectRawTags, e.target.value.trim());
+        });
+    }
+
+    function closeDicomModal() {
+        if (dicomHeaderModal) dicomHeaderModal.style.display = 'none';
+    }
+
+    if (btnCloseDicomModal) btnCloseDicomModal.addEventListener('click', closeDicomModal);
+    if (btnCloseDicomModalBottom) btnCloseDicomModalBottom.addEventListener('click', closeDicomModal);
+    if (dicomHeaderModal) {
+        dicomHeaderModal.addEventListener('click', (e) => {
+            if (e.target === dicomHeaderModal) closeDicomModal();
+        });
+    }
+
     function clearAnalysisResults() {
         currentSagAnalysisData = null;
+        selectedTrackIndex = null;
+
         if (kpiPassRate) {
             kpiPassRate.textContent = '--';
             kpiPassRate.className = 'kpi-value';
@@ -319,7 +447,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 btnRunSagAnalysis.style.cursor = 'pointer';
             }
 
-            // Render Live Expected Field Checklist Grid Cards with Manual Upload option per slot
+            // Render Live Expected Field Checklist Grid Cards with Inspect & Upload options per slot
             if (expectedFieldsGrid) {
                 expectedFieldsGrid.innerHTML = '';
                 expectedList.forEach(slotDef => {
@@ -331,25 +459,40 @@ document.addEventListener('DOMContentLoaded', () => {
                     const card = document.createElement('div');
 
                     if (fileMatch) {
-                        const displayFileName = fileMatch.filename || (typeof fileMatch === 'string' ? fileMatch.split('/').pop().split('\\').pop() : 'DICOM Image');
+                        let fullFileName = 'DICOM Image';
+                        if (fileMatch.filename) {
+                            fullFileName = fileMatch.filename;
+                        } else if (fileMatch.original_filename) {
+                            fullFileName = fileMatch.original_filename;
+                        } else if (typeof fileMatch === 'string') {
+                            fullFileName = fileMatch.split('/').pop().split('\\').pop();
+                        } else if (fileMatch.saved_path) {
+                            fullFileName = fileMatch.saved_path.split('/').pop().split('\\').pop();
+                        }
+
+                        const targetFilePath = fileMatch.saved_path || (typeof fileMatch === 'string' ? fileMatch : '');
+
                         card.style.cssText = isManual
                             ? 'background: rgba(168, 85, 247, 0.15); border: 1px solid #a855f7; padding: 0.45rem 0.65rem; border-radius: 6px; font-size: 0.76rem; color: #f8fafc;'
                             : 'background: rgba(16, 185, 129, 0.12); border: 1px solid #10b981; padding: 0.45rem 0.65rem; border-radius: 6px; font-size: 0.76rem; color: #f8fafc;';
                         card.innerHTML = `
                             <div style="display: flex; align-items: center; justify-content: space-between; gap: 0.3rem;">
-                                <span style="font-weight: 700; color: ${isManual ? '#c084fc' : '#10b981'};">
+                                <span style="font-weight: 700; color: ${isManual ? '#c084fc' : '#10b981'}; max-width: 130px; text-overflow: ellipsis; overflow: hidden; white-space: nowrap;" title="${slotDef.title}">
                                     ${isManual ? '📌' : '✅'} ${slotDef.title}
                                 </span>
-                                <div style="display: flex; align-items: center; gap: 0.25rem;">
-                                    ${isManual ? `<span style="font-size: 0.62rem; background: rgba(168,85,247,0.3); color: #c084fc; font-weight: 700; padding: 0.08rem 0.3rem; border-radius: 3px;">MANUAL UPLOAD</span>` : `<span style="font-size: 0.62rem; color: #34d399; font-weight: 700;">FOLDER</span>`}
+                                <div style="display: flex; align-items: center; gap: 0.2rem;">
+                                    ${isManual ? `<span style="font-size: 0.6rem; background: rgba(168,85,247,0.3); color: #c084fc; font-weight: 700; padding: 0.08rem 0.25rem; border-radius: 3px;">MANUAL</span>` : `<span style="font-size: 0.6rem; color: #34d399; font-weight: 700;">FOLDER</span>`}
+                                    <button type="button" class="btn-slot-inspect" data-slot="${slotDef.key}" data-filepath="${encodeURIComponent(targetFilePath)}" style="background: rgba(59, 130, 246, 0.2); border: 1px solid #3b82f6; color: #60a5fa; font-size: 0.65rem; padding: 0.1rem 0.35rem; border-radius: 3px; cursor: pointer;" title="Inspect DICOM Header for ${slotDef.title}">
+                                        🔍 Inspect
+                                    </button>
                                     <button type="button" class="btn-slot-upload" data-slot="${slotDef.key}" style="background: rgba(0, 242, 254, 0.15); border: 1px solid #00f2fe; color: #00f2fe; font-size: 0.65rem; padding: 0.1rem 0.35rem; border-radius: 3px; cursor: pointer;" title="Upload custom DICOM file for ${slotDef.title}">
                                         📤 Upload
                                     </button>
                                     ${isManual ? `<button type="button" class="btn-slot-clear" data-slot="${slotDef.key}" style="background: rgba(239, 68, 68, 0.2); border: 1px solid #ef4444; color: #fca5a5; font-size: 0.65rem; padding: 0.1rem 0.35rem; border-radius: 3px; cursor: pointer;" title="Clear manual upload override">✕</button>` : ''}
                                 </div>
                             </div>
-                            <div style="font-size: 0.71rem; color: ${isManual ? '#e9d5ff' : '#94a3b8'}; margin-top: 0.2rem; text-overflow: ellipsis; overflow: hidden; white-space: nowrap;">
-                                📄 ${displayFileName}
+                            <div style="font-size: 0.71rem; color: ${isManual ? '#e9d5ff' : '#cbd5e1'}; margin-top: 0.25rem; text-overflow: ellipsis; overflow: hidden; white-space: nowrap; font-family: monospace;" title="${fullFileName}">
+                                📄 ${fullFileName}
                             </div>
                             <input type="file" id="file-input-slot-${slotDef.key}" accept=".dcm,.dicom,image/*" style="display: none;">
                         `;
@@ -374,9 +517,19 @@ document.addEventListener('DOMContentLoaded', () => {
 
                     expectedFieldsGrid.appendChild(card);
 
+                    const inspectBtn = card.querySelector(`.btn-slot-inspect[data-slot="${slotDef.key}"]`);
                     const uploadBtn = card.querySelector(`.btn-slot-upload[data-slot="${slotDef.key}"]`);
                     const fileInput = card.querySelector(`#file-input-slot-${slotDef.key}`);
                     const clearBtn = card.querySelector(`.btn-slot-clear[data-slot="${slotDef.key}"]`);
+
+                    if (inspectBtn) {
+                        inspectBtn.addEventListener('click', (e) => {
+                            e.stopPropagation();
+                            e.preventDefault();
+                            const targetPath = decodeURIComponent(inspectBtn.getAttribute('data-filepath') || '');
+                            inspectDicomHeader(targetPath, slotDef.title);
+                        });
+                    }
 
                     if (uploadBtn) {
                         uploadBtn.addEventListener('click', (e) => {

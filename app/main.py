@@ -473,6 +473,78 @@ def open_file_dialog_endpoint(req: OpenFileDialogRequest = OpenFileDialogRequest
         logger.error(f"Native file dialog error: {err}")
         raise HTTPException(status_code=500, detail=f"Failed to open native Windows file dialog: {err}")
 
+class InspectHeaderRequest(BaseModel):
+    file_path: str
+
+@app.post("/api/inspect-dicom-header")
+def inspect_dicom_header_endpoint(req: InspectHeaderRequest):
+    target_path = normalize_path(req.file_path)
+    if not os.path.exists(target_path):
+        raise HTTPException(status_code=404, detail=f"DICOM file not found: {req.file_path}")
+
+    try:
+        dcm = pydicom.dcmread(target_path, stop_before_pixels=True)
+
+        header_info = {
+            "Filename": os.path.basename(target_path),
+            "Full Path": target_path,
+            "Patient Name": str(getattr(dcm, "PatientName", "Anonymous / QA")),
+            "Patient ID": str(getattr(dcm, "PatientID", "QA_PHANTOM")),
+            "Modality": str(getattr(dcm, "Modality", "RTIMAGE")),
+            "Manufacturer": str(getattr(dcm, "Manufacturer", "Varian Medical Systems")),
+            "Model Name": str(getattr(dcm, "ManufacturerModelName", "Halcyon / TrueBeam")),
+            "Station Name": str(getattr(dcm, "StationName", "HAL7")),
+            "RT Image Label": str(getattr(dcm, "RTImageLabel", "--")),
+            "RT Image Description": str(getattr(dcm, "RTImageDescription", "--")),
+            "Series Description": str(getattr(dcm, "SeriesDescription", "--")),
+            "Image Comments": str(getattr(dcm, "ImageComments", "--")),
+            "Gantry Angle": f"{float(getattr(dcm, 'GantryAngle', 0.0)):.1f}°" if hasattr(dcm, "GantryAngle") else "--",
+            "Collimator Angle": f"{float(getattr(dcm, 'BeamLimitingDeviceAngle', 0.0)):.1f}°" if hasattr(dcm, "BeamLimitingDeviceAngle") else "--",
+            "SAD": f"{float(getattr(dcm, 'RadiationMachineSAD', 1000.0)):.1f} mm" if hasattr(dcm, "RadiationMachineSAD") else "1000.0 mm",
+            "SID": f"{float(getattr(dcm, 'RTImageSID', 1000.0)):.1f} mm" if hasattr(dcm, "RTImageSID") else "--",
+            "Columns (Width)": str(getattr(dcm, "Columns", "--")),
+            "Rows (Height)": str(getattr(dcm, "Rows", "--")),
+            "Pixel Spacing": str(getattr(dcm, "PixelSpacing", getattr(dcm, "ImagePlanePixelSpacing", "--"))),
+            "Image Position": str(getattr(dcm, "ImagePositionPatient", "--")),
+            "Image Orientation": str(getattr(dcm, "ImageOrientationPatient", "--")),
+            "Instance Creation Time": f"{getattr(dcm, 'InstanceCreationDate', '')} {getattr(dcm, 'InstanceCreationTime', '')}".strip() or "--",
+            "SOP Instance UID": str(getattr(dcm, "SOPInstanceUID", "--")),
+            "Study Instance UID": str(getattr(dcm, "StudyInstanceUID", "--")),
+            "Series Instance UID": str(getattr(dcm, "SeriesInstanceUID", "--")),
+        }
+
+        if hasattr(dcm, "ExposureSequence") and len(dcm.ExposureSequence) > 0:
+            exp = dcm.ExposureSequence[0]
+            if hasattr(exp, "KVP"):
+                header_info["KVP"] = f"{float(exp.KVP):.1f} kV"
+            if hasattr(exp, "MetersetExposure"):
+                header_info["Meterset Exposure (MU)"] = f"{float(exp.MetersetExposure):.2f} MU"
+        if hasattr(dcm, "BeamName"):
+            header_info["Beam Name"] = str(dcm.BeamName)
+
+        raw_tags = []
+        for elem in dcm:
+            if elem.VR not in ("OB", "OW", "UN", "SQ") and elem.tag.group != 0x7FE0:
+                val_str = str(elem.value)
+                if len(val_str) > 120:
+                    val_str = val_str[:120] + "..."
+                raw_tags.append({
+                    "tag": f"({elem.tag.group:04X},{elem.tag.element:04X})",
+                    "name": elem.name,
+                    "vr": elem.VR,
+                    "value": val_str
+                })
+
+        return {
+            "status": "success",
+            "filename": os.path.basename(target_path),
+            "header": header_info,
+            "raw_tags": raw_tags[:100]
+        }
+    except Exception as err:
+        logger.error(f"DICOM header inspection error: {err}")
+        raise HTTPException(status_code=500, detail=f"Failed to inspect DICOM header: {err}")
+
 # ----------------------------------------------------
 # QATRACK+ SETTINGS & REST API INTEGRATION ENDPOINTS
 # ----------------------------------------------------
