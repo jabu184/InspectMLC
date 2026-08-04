@@ -23,7 +23,8 @@ Thumbs.db
 .vscode/
 .idea/
 
-# Large test images
+# Large test images & temp uploads
 Test Images/
+sample_data/temp_uploads/
 *.zip
 

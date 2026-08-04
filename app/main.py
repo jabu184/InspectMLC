@@ -432,6 +432,47 @@ def open_folder_dialog_endpoint():
         logger.error(f"Native folder dialog error: {err}")
         raise HTTPException(status_code=500, detail=f"Failed to open native Windows folder dialog: {err}")
 
+class OpenFileDialogRequest(BaseModel):
+    target_slot: Optional[str] = ""
+
+@app.post("/api/open-file-dialog")
+def open_file_dialog_endpoint(req: OpenFileDialogRequest = OpenFileDialogRequest()):
+    try:
+        import tkinter as tk
+        from tkinter import filedialog
+
+        root = tk.Tk()
+        root.withdraw()
+        root.attributes("-topmost", True)
+        file_path = filedialog.askopenfilename(
+            title=f"Select DICOM Image File for Slot: {req.target_slot or 'Input Slot'}",
+            filetypes=[
+                ("DICOM / Image Files", "*.dcm *.dicom *.IMA *.png *.jpg *.jpeg *.tif *.tiff"),
+                ("All Files", "*.*")
+            ]
+        )
+        root.destroy()
+
+        if file_path:
+            norm_p = normalize_path(file_path)
+            orig_name = os.path.basename(norm_p)
+            return {
+                "status": "success",
+                "saved_path": norm_p,
+                "original_filename": orig_name,
+                "canceled": False
+            }
+        else:
+            return {
+                "status": "success",
+                "saved_path": "",
+                "original_filename": "",
+                "canceled": True
+            }
+    except Exception as err:
+        logger.error(f"Native file dialog error: {err}")
+        raise HTTPException(status_code=500, detail=f"Failed to open native Windows file dialog: {err}")
+
 # ----------------------------------------------------
 # QATRACK+ SETTINGS & REST API INTEGRATION ENDPOINTS
 # ----------------------------------------------------
